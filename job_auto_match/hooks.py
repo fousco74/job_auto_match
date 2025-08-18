@@ -13,7 +13,7 @@ app_license = "mit"
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
 # 	{
-# 		"name": "job_auto_match",
+# 		"name": "job_auto_match",""
 # 		"logo": "/assets/job_auto_match/logo.png",
 # 		"title": "job_auto_match",
 # 		"route": "/job_auto_match",
@@ -137,13 +137,15 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+ # apps/job_auto_match/job_auto_match/hooks.py
+
+doc_events = {
+    "Job Applicant": {
+        "after_insert": "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.enqueue_matching",
+        "before_insert" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.validate_unique_application"
+    }
+}
+
 
 # Scheduled Tasks
 # ---------------
