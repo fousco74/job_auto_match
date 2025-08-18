@@ -1,0 +1,60 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-07-29 12:14:15.363138",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "annee",
+  "qualification",
+  "column_break_jmsb",
+  "institution",
+  "level"
+ ],
+ "fields": [
+  {
+   "fieldname": "qualification",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Qualification"
+  },
+  {
+   "fieldname": "institution",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Institution"
+  },
+  {
+   "fieldname": "level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Level",
+   "options": "Graduate\nUnder Graduate\nPost Graduate"
+  },
+  {
+   "fieldname": "column_break_jmsb",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "annee",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Ann\u00e9e"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-08-13 11:18:47.882410",
+ "modified_by": "Administrator",
+ "module": "job_auto_match",
+ "name": "Diploma Applicant",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

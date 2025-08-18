@@ -1,0 +1,160 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-08-07 21:38:27.985036",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "site_url",
+  "column_break_qxph",
+  "gemini_api_key",
+  "testlify_configuration_section",
+  "testlify_base_url",
+  "testlify_candidate_invite",
+  "testlify_token",
+  "column_break_mxxq",
+  "status_qualified",
+  "qualification_score_threshold",
+  "status_not_qualified",
+  "section_break_ngmo",
+  "candidate_not_matching_subject",
+  "candidate_not_matching_email_header",
+  "column_break_pymk",
+  "candidate_not_matching_email_template",
+  "rejected_email_configuration_section",
+  "candidate_rejected_after_test_subject",
+  "candidate_rejected_after_test_header",
+  "column_break_bcqc",
+  "candidate_rejected_after_test_template"
+ ],
+ "fields": [
+  {
+   "fieldname": "site_url",
+   "fieldtype": "Data",
+   "label": "Site Url"
+  },
+  {
+   "fieldname": "gemini_api_key",
+   "fieldtype": "Data",
+   "label": "Gemini Api Key"
+  },
+  {
+   "fieldname": "testlify_base_url",
+   "fieldtype": "Data",
+   "label": "Testlify Base Url"
+  },
+  {
+   "fieldname": "testlify_token",
+   "fieldtype": "Data",
+   "label": "Testlify Token"
+  },
+  {
+   "fieldname": "testlify_candidate_invite",
+   "fieldtype": "Data",
+   "label": "Testlify Candidate Invite"
+  },
+  {
+   "fieldname": "status_qualified",
+   "fieldtype": "Data",
+   "label": "Status qualified"
+  },
+  {
+   "fieldname": "status_not_qualified",
+   "fieldtype": "Data",
+   "label": "status not qualified"
+  },
+  {
+   "fieldname": "qualification_score_threshold",
+   "fieldtype": "Int",
+   "label": "qualification score threshold",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "candidate_not_matching_subject",
+   "fieldtype": "Data",
+   "label": "candidate not matching subject"
+  },
+  {
+   "fieldname": "candidate_not_matching_email_header",
+   "fieldtype": "Data",
+   "label": "candidate not matching email header"
+  },
+  {
+   "fieldname": "section_break_ngmo",
+   "fieldtype": "Section Break",
+   "label": "Not matching email configuration"
+  },
+  {
+   "description": "{{ applicant_name }}, {{ job_title }}, {{ score }}, {{ justification }}",
+   "fieldname": "candidate_not_matching_email_template",
+   "fieldtype": "Small Text",
+   "label": "candidate not matching email template\t"
+  },
+  {
+   "fieldname": "column_break_pymk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_qxph",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "testlify_configuration_section",
+   "fieldtype": "Section Break",
+   "label": "Testlify Configuration"
+  },
+  {
+   "fieldname": "column_break_mxxq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rejected_email_configuration_section",
+   "fieldtype": "Section Break",
+   "label": "Rejected Email Configuration "
+  },
+  {
+   "fieldname": "candidate_rejected_after_test_subject",
+   "fieldtype": "Data",
+   "label": "candidate rejected after test subject"
+  },
+  {
+   "fieldname": "column_break_bcqc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "candidate_rejected_after_test_header",
+   "fieldtype": "Data",
+   "label": "candidate rejected after test header"
+  },
+  {
+   "fieldname": "candidate_rejected_after_test_template",
+   "fieldtype": "Small Text",
+   "label": "candidate rejected after test template"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-08-11 11:03:40.380872",
+ "modified_by": "Administrator",
+ "module": "job_auto_match",
+ "name": "Job Matching Integration Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
