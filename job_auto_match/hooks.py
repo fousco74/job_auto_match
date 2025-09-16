@@ -356,3 +356,78 @@ doc_events = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+fixtures = [
+    # --- Doctypes métier du recrutement ---
+    {"doctype": "Staffing Plan"},
+    {"doctype": "Job Requisition"},
+    {"doctype": "Job Opening"},
+    {"doctype": "Job Applicant"},
+    {"doctype": "Job Offer"},
+    {"doctype": "Employee Referral"},
+
+    # Gestion des entretiens
+    {"doctype": "Interview Type"},
+    {"doctype": "Interview Round"},
+    {"doctype": "Interview"},
+    {"doctype": "Interview Feedback"},
+
+    # Nominations et lettres d'embauche
+    {"doctype": "Appointment"},
+    {"doctype": "Appointment Letter Template"},
+    {"doctype": "Appointment Letter"},
+
+    # Rapports liés au recrutement
+    {"doctype": "Report", "filters": [["ref_doctype", "in", [
+        "Job Requisition", "Job Opening", "Job Applicant", "Job Offer",
+        "Interview", "Appointment"
+    ]]]},
+
+    # --- Personnalisations et automatisations ---
+    # Champs personnalisés liés au recrutement
+    {"doctype": "Custom Field", "filters": [["dt", "in", [
+        "Staffing Plan", "Job Requisition", "Job Opening",
+        "Job Applicant", "Job Offer", "Interview", "Appointment"
+    ]]]},
+
+    # Property Setters (modifications de propriétés sur des champs ou formulaires)
+    {"doctype": "Property Setter", "filters": [["doc_type", "in", [
+        "Staffing Plan", "Job Requisition", "Job Opening",
+        "Job Applicant", "Job Offer", "Interview", "Appointment"
+    ]]]},
+
+    # Workflows
+    {"doctype": "Workflow", "filters": [["document_type", "in", [
+        "Job Requisition", "Job Opening", "Job Applicant", "Job Offer", "Interview", "Appointment"
+    ]]]},
+
+    # États de Workflow
+    {"doctype": "Workflow State"},
+
+    # Scripts côté serveur
+    {"doctype": "Server Script", "filters": [["reference_doctype", "in", [
+        "Staffing Plan", "Job Requisition", "Job Opening",
+        "Job Applicant", "Job Offer", "Interview", "Appointment"
+    ]]]},
+
+    # Scripts côté client
+    {"doctype": "Client Script", "filters": [["dt", "in", [
+        "Staffing Plan", "Job Requisition", "Job Opening",
+        "Job Applicant", "Job Offer", "Interview", "Appointment"
+    ]]]},
+
+    # Notifications liées au recrutement
+    {"doctype": "Notification", "filters": [["document_type", "in", [
+        "Job Applicant", "Job Offer", "Interview", "Appointment"
+    ]]]},
+
+    # Alertes email et modèles
+    {"doctype": "Email Template", "filters": [["name", "like", "%Job%"]]},
+
+    # Paramétrages automatiques (Auto Email Reports, etc.)
+    {"doctype": "Auto Email Report", "filters": [["report", "in", [
+        "Job Openings Report", "Job Applicants Report"
+    ]]]},
+
+    # Scripts de type Workflow Action
+    {"doctype": "Workflow Action Master"}
+]
