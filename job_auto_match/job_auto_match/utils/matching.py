@@ -259,24 +259,65 @@ def process_job_applicant_matching(applicant_name):
         for skill in info.get("competences", []):
             doc.append("skills", {"skill_name": skill})
     
+        # Gestion des expériences
     if hasattr(doc, "experiences"):
         doc.set("experiences", [])
+        
+        last_annee = ""
+        last_title = ""
+        last_description = ""
+
         for experience in info.get("experience_professionnelle", []):
-            doc.append("experiences",  {
-            "annee": experience.get("annee", ""),
-            "title": experience.get("titre", ""),
-            "description": experience.get("description", "")
-        })
-    
+            annee = experience.get("annee", last_annee)
+            title = experience.get("titre", last_title)
+            description = experience.get("description", last_description)
+
+            # Mise à jour des valeurs précédentes si la clé existe et n'est pas vide
+            if experience.get("annee"):  
+                last_annee = experience["annee"]
+            if experience.get("titre"):
+                last_title = experience["titre"]
+            if experience.get("description"):
+                last_description = experience["description"]
+
+            doc.append("experiences", {
+                "annee": annee,
+                "title": title,
+                "description": description
+            })
+
+    # Gestion des diplômes
     if hasattr(doc, "diplomes"):
         doc.set("diplomes", [])
+        
+        last_annee = ""
+        last_qualification = ""
+        last_institution = ""
+        last_level = ""
+
         for diplome in info.get("diplomes", []):
-            doc.append("diplomes",  {
-           "annee": diplome.get("annee", ""),
-           "qualification": diplome.get("diplome", ""),
-           "institution": diplome.get("institution", ""),
-           "level": diplome.get("level", "")
-        })
+            annee = diplome.get("annee", last_annee)
+            qualification = diplome.get("diplome", last_qualification)
+            institution = diplome.get("institution", last_institution)
+            level = diplome.get("level", last_level)
+
+            # Mise à jour des dernières valeurs si elles sont présentes
+            if diplome.get("annee"):
+                last_annee = diplome["annee"]
+            if diplome.get("diplome"):
+                last_qualification = diplome["diplome"]
+            if diplome.get("institution"):
+                last_institution = diplome["institution"]
+            if diplome.get("level"):
+                last_level = diplome["level"]
+
+            doc.append("diplomes", {
+                "annee": annee,
+                "qualification": qualification,
+                "institution": institution,
+                "level": level
+            })
+
 
     doc.save(ignore_permissions=True)
     frappe.db.commit()

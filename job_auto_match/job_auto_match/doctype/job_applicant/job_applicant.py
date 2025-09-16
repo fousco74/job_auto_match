@@ -82,3 +82,66 @@ def validate_unique_application(doc, method=None):
         # raise frappe.Redirect
 
     _dbg("No duplicate found, validation passed")
+    
+    
+def job_applicant_status_change(doc, method=None):
+    """
+    Sync Job Applicant.workflow_state <- custom_status_x
+    (sans toucher au champ status)
+    """
+    src = "custom_status_x"
+    dst = "workflow_state"
+
+    # 1) Ne rien faire si la valeur n'a pas changé
+    try:
+        changed = doc.has_value_changed(src)
+    except Exception:
+        old = getattr(doc, "get_doc_before_save", lambda: None)()
+        changed = bool(old) and getattr(old, src, None) != getattr(doc, src, None)
+    if not changed:
+        return
+
+    # 2) Si tes valeurs correspondent EXACTEMENT aux noms de Workflow State,
+    #    on copie tel quel :
+    new_ws = getattr(doc, src, None)
+
+    #    Sinon, décommente et adapte ce mapping :
+    # mapping = {
+    #     "A contacter": "Open",
+    #     "Entretien": "Under Review",
+    #     "Refusé": "Rejected",
+    # }
+    # new_ws = mapping.get(getattr(doc, src, None))
+
+    # 3) Sécurité : s'assurer que le Workflow State existe
+    if new_ws and not frappe.db.exists("Workflow State", new_ws):
+        frappe.throw(f"Workflow State introuvable : {new_ws}. "
+                     "Créez-le ou ajustez le mapping.")
+
+    # 4) Assigner sur le doc (sera persisté par save)
+    if doc.get(dst) != new_ws:
+        setattr(doc, dst, new_ws)
+
+
+def job_applicant_status_sync(doc, method=None):
+    """
+    Imposer: workflow_state == mapping(custom_status_x)
+    (sans toucher à 'status')
+    """
+    # Si tes noms de Workflow State == valeurs de custom_status_x :
+    expected_ws = doc.custom_status_x
+
+    # Sinon, décommente et adapte :
+    # mapping = {
+    #     "A contacter": "Open",
+    #     "Entretien": "Under Review",
+    #     "Refusé": "Rejected",
+    # }
+    # expected_ws = mapping.get(doc.custom_status_x)
+
+    if expected_ws:
+        if not frappe.db.exists("Workflow State", expected_ws):
+            frappe.throw(f"Workflow State introuvable : {expected_ws}")
+
+        if doc.workflow_state != expected_ws:
+            doc.workflow_state = expected_ws

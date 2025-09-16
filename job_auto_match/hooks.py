@@ -64,6 +64,116 @@ app_license = "mit"
 # 	"Role": "home_page"
 # }
 
+fixtures = [
+    # Export des Custom Fields liés au recrutement
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            [
+                "dt", "in", [
+                    "Job Offer",
+                    "Job Applicant",
+                    "Job Opening",
+                    "Job Requisition",
+                    "Interview",
+                    "Interview Round"
+                ]
+            ]
+        ]
+    },
+    # Export des Property Setter
+    {
+        "doctype": "Property Setter",
+        "filters": [
+            [
+                "doc_type", "in", [
+                    "Job Offer",
+                    "Job Applicant",
+                    "Job Opening",
+                    "Job Requisition",
+                    "Interview",
+                    "Interview Round"
+                ]
+            ]
+        ]
+    },
+    # Export des Workflows liés au recrutement
+    {
+        "doctype": "Workflow",
+        "filters": [
+            [
+                "document_type", "in", [
+                    "Job Offer",
+                    "Job Applicant",
+                    "Job Opening",
+                    "Job Requisition",
+                    "Interview"
+                ]
+            ]
+        ]
+    },
+    # Export des Workflow States
+    {
+        "doctype": "Workflow State",
+        "filters": [
+            [
+                "state", "like", "%Recruitment%"
+            ]
+        ]
+    },
+    # Export des Workflow Actions
+    {
+        "doctype": "Workflow Action",
+        "filters": [
+            [
+                "name", "like", "%Recruitment%"
+            ]
+        ]
+    },
+    # Export des Roles spécifiques au recrutement
+    {
+        "doctype": "Role",
+        "filters": [
+            [
+                "name", "in", [
+                    "HR Manager",
+                    "HR User",
+                    "Recruiter"
+                ]
+            ]
+        ]
+    },
+    # Export des Print Formats (optionnel)
+    {
+        "doctype": "Print Format",
+        "filters": [
+            [
+                "doc_type", "in", [
+                    "Job Offer",
+                    "Job Applicant",
+                    "Job Opening",
+                    "Interview"
+                ]
+            ]
+        ]
+    },
+    # Export des Reports personnalisés
+    {
+        "doctype": "Report",
+        "filters": [
+            [
+                "ref_doctype", "in", [
+                    "Job Offer",
+                    "Job Applicant",
+                    "Job Opening",
+                    "Interview"
+                ]
+            ]
+        ]
+    }
+]
+
+
 # Generators
 # ----------
 
@@ -142,7 +252,9 @@ app_license = "mit"
 doc_events = {
     "Job Applicant": {
         "after_insert": "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.enqueue_matching",
-        "before_insert" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.validate_unique_application"
+        "before_insert" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.validate_unique_application",
+        "before_save" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.job_applicant_status_sync",
+        "on_update" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.job_applicant_status_change"
     }
 }
 
