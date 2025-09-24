@@ -328,35 +328,50 @@ def process_job_applicant_matching(applicant_name):
         "skills": [r.skill for r in fiche.skills],
         "outils": [r.outil for r in fiche.outils],
         "minimum_experience": fiche.minimum_experience,
-        "study_level": fiche.study_level
+        "study_level": fiche.study_level,
+        "fiche" : fiche.description
     }
 
-    # --- GEMINI MATCHING ---
+    
+    
     prompt2 = f"""
-    Tu es un expert en recrutement.
-    Compare le profil du candidat ci-dessous (JSON) aux exigences de la fiche de poste suivante (JSON).
-    Consigne :
-    - Analyse précisément l’adéquation entre en etant juste:
-    • compétences (skills) 
-    • outils (outils) : !important
-    • niveau d’études (study_level)  ! important
-    • expérience (minimum_experience) 
-    - Attribue un score de correspondance sur 100, en fonction de la similarité et de la pertinence (soit juste et donne une note méritée et juste comme si c'etait ton entreprise et que tu ne voudrait aps que quelqu'un ayant les capacités requis soit selectionner et inversement).
-    - Rends uniquement ce JSON :
+        Tu es un expert en recrutement technique.
+        Compare le profil du candidat (JSON) à la fiche de poste (JSON) en tenant compte des PROJETS réalisés, des COMPÉTENCES, des OUTILS/TECHNOS et de l’EXPÉRIENCE. Analyse précise et factuelle, sans inventer d’informations.
 
-    {{
-    "score": <score>,
-    "justification": "<3 phrases maximum expliquant le score>"
-    }}
+        Barème (total = 100) :
+        - Compétences (skills)  : correspondance avec les compétences requises (priorité aux indispensables). Bonus si démontrées dans des projets similaires au poste.
+        - Outils (outils)  : correspondance exacte ou équivalente (synonymes/acronymes/versions proches acceptés si pertinents : p.ex. JS=JavaScript, React=React.js, Node=Node.js).
+        - Niveau d’études (study_level) : adéquation au niveau requis (équivalences acceptées : Licence=Bachelor, Master=MSc/MS, Bac+5=M2, etc.).
+        - Expérience (minimum_experience) : années pertinentes par rapport au domaine du poste ; si < minimum, pénalité proportionnelle ; si > minimum, pas de bonus automatique sans pertinence.
+        -Fiche (fiche) : description de la fiche de note comprenant : Principales Missions, Activités Principales , Formations et Expériences Souhaitées
 
-    Voici le profil candidat :
-    {json.dumps(candidate_json, ensure_ascii=False)}
+        Procédure d’évaluation :
+        - Lis et normalise (minuscules, enlève pluriels simples/accents, tolère fautes minimes).
+        -compare chaque elements (projet, Principales Missions , Activités Principales , Formations et Expériences Souhaitées, Expérience, Niveau d’études, Outils, Compétences ) de la fiche et du cv
+        - Si la fiche distingue must-have vs nice-to-have, priorise must-have.
+        - Prends en compte le contexte des projets (secteur, responsabilités, impact) pour juger la pertinence.
+        - Si un critère est absent dans la fiche (ex. pas de study_level), redistribue son poids proportionnellement sur les autres critères.
+        - N’utilise aucune source externe. Toute info manquante est considérée non satisfaite.
+        - Calcule un score sur 100 (arrondi à l’entier le plus proche).
 
-    Voici la fiche de poste :
-    {json.dumps(job_json, ensure_ascii=False)}
+        Contraintes de sortie :
+        - Réponds UNIQUEMENT avec ce JSON (aucun texte autour).
+        - "score" : entier 0–100.
+        - "justification" : 1 à 3 phrases maximum, en français, résumant objectivement les principaux points forts/faiblesses.
 
-    Réponds uniquement avec le JSON demandé.
-    """
+        Profil candidat :
+        {json.dumps(candidate_json, ensure_ascii=False)}
+
+        Fiche de poste :
+        {json.dumps(job_json, ensure_ascii=False)}
+
+        Rends UNIQUEMENT ce JSON :
+        {{
+        "score": <entier entre 0 et 100>,
+        "justification": "<5 phrases maximum expliquant le score>"
+        }}
+        """
+
 
     response2 = client.models.generate_content(
         model="gemini-2.5-flash",
