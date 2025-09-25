@@ -19,8 +19,8 @@ def send_candidate_not_matching_email(doc):
         frappe.logger().info(f"[NOT_MATCH_MAIL] doc.email_id: {getattr(doc, 'email_id', None)}")
         frappe.logger().info(f"[NOT_MATCH_MAIL] applicant_name: {getattr(doc, 'applicant_name', None)}")
         frappe.logger().info(f"[NOT_MATCH_MAIL] job_title: {getattr(doc, 'job_title', None)}")
-        frappe.logger().info(f"[NOT_MATCH_MAIL] score: {getattr(doc, 'matching_score', None)}")
-        frappe.logger().info(f"[NOT_MATCH_MAIL] justification: {getattr(doc, 'justification', None)}")
+        frappe.logger().info(f"[NOT_MATCH_MAIL] score: {getattr(doc, 'custom_matching_score', None)}")
+        frappe.logger().info(f"[NOT_MATCH_MAIL] justification: {getattr(doc, 'custom_justification', None)}")
 
         # Vérification du champ email_id
         recipients = [getattr(doc, 'email_id', None)]
@@ -31,8 +31,8 @@ def send_candidate_not_matching_email(doc):
         context = {
             "applicant_name": getattr(doc, "applicant_name", ""),
             "job_title": getattr(doc, "job_title", ""),
-            "score": getattr(doc, "matching_score", ""),
-            "justification": getattr(doc, "justification", "")
+            "score": getattr(doc, "custom_matching_score", ""),
+            "justification": getattr(doc, "custom_justification", "")
         }
         
         subject = frappe.render_template(settings.candidate_not_matching_subject, context) or frappe._("Votre candidature n'est pas retenue pour le moment")
@@ -65,7 +65,7 @@ def send_candidate_invite(doc, assessments: list) -> list:
         token = settings.testlify_token
 
         print("[INVITE] ▶️ Testlify API URL :", api_url)
-        print(f"[INVITE] ▶️ Candidate : {doc.first_name} {doc.last_name} <{getattr(doc, 'email_id', None)}>")
+        print(f"[INVITE] ▶️ Candidate : {doc.custom_first_name} {doc.custom_last_name} <{getattr(doc, 'email_id', None)}>")
 
         headers = {
             'Authorization': f'Bearer {token}',
@@ -92,8 +92,8 @@ def send_candidate_invite(doc, assessments: list) -> list:
             # 3) Préparer le payload et l'afficher
             payload = {
                 'candidateInvites': [{
-                    'firstName': doc.first_name,
-                    'lastName': doc.last_name,
+                    'firstName': doc.custom_first_name,
+                    'lastName': doc.custom_last_name,
                     'email': doc.email_id,
                 }],
                 'assessmentId': assessment_id,
@@ -122,7 +122,7 @@ def send_candidate_invite(doc, assessments: list) -> list:
                     doc.append("assessments", {
                         "assessment_name": assessment_name,
                         "assessment_id": assessment_id,
-                        "sent": True
+                        "sent": 1
                     })
                     doc.save(ignore_permissions=True)
                     frappe.db.commit()
@@ -162,6 +162,8 @@ def process_job_applicant_matching(applicant_name):
     status_not_qualified = settings.status_not_qualified
     qualification_score_threshold = settings.qualification_score_threshold
     doc = frappe.get_doc("Job Applicant", applicant_name)
+    # --- RÉCUP FICHE POSTE & MATCHING GEMINI ---
+    fiche = frappe.get_doc("Job Opening", doc.job_title or "")
 
     # --- PARAMS ---
     site_url = settings.site_url
@@ -239,29 +241,37 @@ def process_job_applicant_matching(applicant_name):
     # --- MISE À JOUR DU CANDIDAT ---
     info = candidate_json.get("candidate_info", {})
     if info.get("age"):
-        doc.old = info["age"]
+        doc.custom_old = info["age"]
     if info.get("first_name"):
-        doc.first_name = info["first_name"]
+        doc.custom_first_name = info["first_name"]
     if info.get("last_name"):
-        doc.last_name = info["last_name"]
+        doc.custom_last_name = info["last_name"]
     if info.get("annee_experience"):
-        doc.minimum_experience = info["annee_experience"]
+        doc.custom_minimum_experience = info["annee_experience"]
     if info.get("niveau_etude"):
-        doc.study_level = info["niveau_etude"]
+        doc.custom_study_level = info["niveau_etude"]
 
-    if hasattr(doc, "outils"):
-        doc.set("outils", [])
+    if hasattr(doc, "custom_outils"):
+        doc.set("custom_outils", [])
         for outil in info.get("outils", []):
-            doc.append("outils", {"outil_name": outil})
+            doc.append("custom_outils", {"outil_name": outil})
 
-    if hasattr(doc, "skills"):
-        doc.set("skills", [])
+    if hasattr(doc, "custom_skills"):
+        doc.set("custom_skills", [])
         for skill in info.get("competences", []):
-            doc.append("skills", {"skill_name": skill})
+            doc.append("custom_skills", {"skill_name": skill})
+            
+    if hasattr(doc, "custom_assessments"):
+        doc.set("custom_assessments", [])
+        for assessment in fiche.custom_assessments:
+            doc.append("custom_assessments", {
+                "assessment_id": assessment.id,
+                "assessment_name" : assessment.assessment_name
+                })
     
         # Gestion des expériences
-    if hasattr(doc, "experiences"):
-        doc.set("experiences", [])
+    if hasattr(doc, "custom_experiences"):
+        doc.set("custom_experiences", [])
         
         last_annee = ""
         last_title = ""
@@ -280,15 +290,15 @@ def process_job_applicant_matching(applicant_name):
             if experience.get("description"):
                 last_description = experience["description"]
 
-            doc.append("experiences", {
+            doc.append("custom_experiences", {
                 "annee": annee,
                 "title": title,
                 "description": description
             })
 
     # Gestion des diplômes
-    if hasattr(doc, "diplomes"):
-        doc.set("diplomes", [])
+    if hasattr(doc, "custom_diplomes"):
+        doc.set("custom_diplomes", [])
         
         last_annee = ""
         last_qualification = ""
@@ -311,7 +321,7 @@ def process_job_applicant_matching(applicant_name):
             if diplome.get("level"):
                 last_level = diplome["level"]
 
-            doc.append("diplomes", {
+            doc.append("custom_diplomes", {
                 "annee": annee,
                 "qualification": qualification,
                 "institution": institution,
@@ -322,55 +332,58 @@ def process_job_applicant_matching(applicant_name):
     doc.save(ignore_permissions=True)
     frappe.db.commit()
 
-    # --- RÉCUP FICHE POSTE & MATCHING GEMINI ---
-    fiche = frappe.get_doc("Job Opening", doc.job_title or "")
+    
     job_json = {
-        "skills": [r.skill for r in fiche.skills],
-        "outils": [r.outil for r in fiche.outils],
-        "minimum_experience": fiche.minimum_experience,
-        "study_level": fiche.study_level,
+        "skills": [r.skill for r in fiche.custom_skills],
+        "outils": [r.outil for r in fiche.custom_outils],
+        "minimum_experience": fiche.custom_minimum_experience,
+        "study_level": fiche.custom_study_level,
         "fiche" : fiche.description
     }
 
     
     
     prompt2 = f"""
-        Tu es un expert en recrutement technique.
-        Compare le profil du candidat (JSON) à la fiche de poste (JSON) en tenant compte des PROJETS réalisés, des COMPÉTENCES, des OUTILS/TECHNOS et de l’EXPÉRIENCE. Analyse précise et factuelle, sans inventer d’informations.
+    Tu es un expert en recrutement technique.
+    Compare le profil du candidat (JSON) à la fiche de poste (JSON) en tenant compte des PROJETS réalisés, des COMPÉTENCES, des OUTILS/TECHNOS et de l’EXPÉRIENCE. Analyse précise et factuelle, sans inventer d’informations.
 
-        Barème (total = 100) :
-        - Compétences (skills)  : correspondance avec les compétences requises (priorité aux indispensables). Bonus si démontrées dans des projets similaires au poste.
-        - Outils (outils)  : correspondance exacte ou équivalente (synonymes/acronymes/versions proches acceptés si pertinents : p.ex. JS=JavaScript, React=React.js, Node=Node.js).
-        - Niveau d’études (study_level) : adéquation au niveau requis (équivalences acceptées : Licence=Bachelor, Master=MSc/MS, Bac+5=M2, etc.).
-        - Expérience (minimum_experience) : années pertinentes par rapport au domaine du poste ; si < minimum, pénalité proportionnelle ; si > minimum, pas de bonus automatique sans pertinence.
-        -Fiche (fiche) : description de la fiche de note comprenant : Principales Missions, Activités Principales , Formations et Expériences Souhaitées
+    Barème (total = 100) — critères optionnels :
+    - Compétences (skills) — 40 pts : correspondance avec les compétences requises (priorité aux indispensables/must-have). Bonus si démontrées dans des projets similaires aux missions du poste.
+    - Outils/Technologies (outils) — 25 pts : correspondance exacte ou équivalente (synonymes/acronymes/versions proches acceptés : ex. JS=JavaScript, React=React.js, Node=Node.js).
+    - Niveau d’études (study_level) — 15 pts : adéquation au niveau requis (équivalences acceptées : Licence=Bachelor, Master=MS/MSc, Bac+5=M2, etc.).
+    - Expérience (minimum_experience) — 20 pts : années pertinentes sur le domaine/tech stack/missions ; si < minimum, pénalité proportionnelle ; si > minimum, pas de bonus automatique sans pertinence.
+    [Important] Chaque critère est *optionnel* : s’il n’est pas renseigné dans la fiche, redistribue son poids proportionnellement sur les critères présents.
 
-        Procédure d’évaluation :
-        - Lis et normalise (minuscules, enlève pluriels simples/accents, tolère fautes minimes).
-        -compare chaque elements (projet, Principales Missions , Activités Principales , Formations et Expériences Souhaitées, Expérience, Niveau d’études, Outils, Compétences ) de la fiche et du cv
-        - Si la fiche distingue must-have vs nice-to-have, priorise must-have.
-        - Prends en compte le contexte des projets (secteur, responsabilités, impact) pour juger la pertinence.
-        - Si un critère est absent dans la fiche (ex. pas de study_level), redistribue son poids proportionnellement sur les autres critères.
-        - N’utilise aucune source externe. Toute info manquante est considérée non satisfaite.
-        - Calcule un score sur 100 (arrondi à l’entier le plus proche).
+    Éléments de la fiche (fiche) à considérer :
+    - Principales Missions & Activités Principales : servent de référentiel pour juger la pertinence des projets, responsabilités et impacts du candidat.
+    - Formations et Expériences Souhaitées, Outils, Niveau d’études, Expérience, Compétences : comparer aux informations du CV (y compris intitulés proches).
 
-        Contraintes de sortie :
-        - Réponds UNIQUEMENT avec ce JSON (aucun texte autour).
-        - "score" : entier 0–100.
-        - "justification" : 1 à 3 phrases maximum, en français, résumant objectivement les principaux points forts/faiblesses.
+    Procédure d’évaluation :
+    - Normalise textes (minuscules, accents/pluriels simples/fautes mineures tolérés).
+    - Compare *chaque* élément suivant entre fiche et CV : projets, missions, activités, formations/expériences souhaitées, expérience, niveau d’études, outils, compétences.
+    - Si la fiche distingue must-have vs nice-to-have, priorise must-have.
+    - Prends en compte le contexte des projets (secteur, responsabilités, impact, environnement technique) pour juger la pertinence.
+    - Aucune source externe ; toute info manquante = non satisfaite.
+    - Calcule un score sur 100 et arrondis à l’entier le plus proche.
 
-        Profil candidat :
-        {json.dumps(candidate_json, ensure_ascii=False)}
+    Contraintes de sortie :
+    - Réponds UNIQUEMENT avec ce JSON (aucun texte autour).
+    - "score" : entier 0–100.
+    - "justification" : 1 à 5 phrases maximum, en français, résumant objectivement les principaux points forts/faiblesses.
 
-        Fiche de poste :
-        {json.dumps(job_json, ensure_ascii=False)}
+    Profil candidat :
+    {json.dumps(candidate_json, ensure_ascii=False)}
 
-        Rends UNIQUEMENT ce JSON :
-        {{
-        "score": <entier entre 0 et 100>,
-        "justification": "<5 phrases maximum expliquant le score>"
-        }}
-        """
+    Fiche de poste :
+    {json.dumps(job_json, ensure_ascii=False)}
+
+    Rends UNIQUEMENT ce JSON :
+    {{
+    "score": <entier entre 0 et 100>,
+    "justification": "<jusqu’à 5 phrases expliquant le score>"
+    }}
+    """
+
 
 
     response2 = client.models.generate_content(
@@ -388,8 +401,8 @@ def process_job_applicant_matching(applicant_name):
 
     if isinstance(matching_score, dict):
         score = matching_score.get("score", 0)
-        doc.matching_score = score
-        doc.justification = matching_score.get("justification")
+        doc.custom_matching_score = score
+        doc.custom_justification = matching_score.get("justification")
 
         # Normalisation du score (0-100) vers (0.0-1.0)
         rating = score / 100
@@ -403,13 +416,13 @@ def process_job_applicant_matching(applicant_name):
 
 
 
-        doc.status = qualified_status if score >= qualification_score_threshold else status_not_qualified
+        doc.custom_status_x = qualified_status if score >= qualification_score_threshold else status_not_qualified
         doc.save(ignore_permissions=True)
         frappe.db.commit()
 
         
     if matching_score.get("score", 0) >= 70:
-        send_candidate_invite(doc, fiche.assessments)
+        send_candidate_invite(doc, fiche.custom_assessments)
     else:
         send_candidate_not_matching_email(doc)
 

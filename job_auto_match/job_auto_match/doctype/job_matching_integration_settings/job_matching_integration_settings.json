@@ -55,13 +55,15 @@
   },
   {
    "fieldname": "status_qualified",
-   "fieldtype": "Data",
-   "label": "Status qualified"
+   "fieldtype": "Select",
+   "label": "Status qualified",
+   "options": "Open\nReplied\nRejected\nHold\nAccepted\nIn qualification process"
   },
   {
    "fieldname": "status_not_qualified",
-   "fieldtype": "Data",
-   "label": "status not qualified"
+   "fieldtype": "Select",
+   "label": "status not qualified",
+   "options": "Open\nReplied\nRejected\nHold\nAccepted\nIn qualification process"
   },
   {
    "fieldname": "qualification_score_threshold",
@@ -136,7 +138,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-08-11 11:03:40.380872",
+ "modified": "2025-09-24 19:23:34.547931",
  "modified_by": "Administrator",
  "module": "job_auto_match",
  "name": "Job Matching Integration Settings",
