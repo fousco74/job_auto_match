@@ -15,7 +15,10 @@
   "column_break_mxxq",
   "status_qualified",
   "qualification_score_threshold",
+  "rejected_max_score",
   "status_not_qualified",
+  "status_rejected",
+  "gemini_error_status",
   "section_break_ngmo",
   "candidate_not_matching_subject",
   "candidate_not_matching_email_header",
@@ -132,13 +135,31 @@
    "fieldname": "candidate_rejected_after_test_template",
    "fieldtype": "Small Text",
    "label": "candidate rejected after test template"
+  },
+  {
+   "default": "Rejected",
+   "fieldname": "status_rejected",
+   "fieldtype": "Select",
+   "label": "status rejected",
+   "options": "Open\nReplied\nRejected\nHold\nAccepted\nIn qualification process"
+  },
+  {
+   "fieldname": "rejected_max_score",
+   "fieldtype": "Int",
+   "label": "rejected max score"
+  },
+  {
+   "default": "Open",
+   "fieldname": "gemini_error_status",
+   "fieldtype": "Data",
+   "label": "gemini error status"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-09-24 19:23:34.547931",
+ "modified": "2025-10-03 15:35:08.963500",
  "modified_by": "Administrator",
  "module": "job_auto_match",
  "name": "Job Matching Integration Settings",

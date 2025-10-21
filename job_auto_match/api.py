@@ -1,6 +1,61 @@
 import frappe
 import requests
+from frappe import enqueue
 from contextlib import contextmanager
+from jinja2 import TemplateNotFound
+
+
+# Flag dédié (ajoute un Check field dans Job Applicant)
+FLAG_REJECTED_AFTER_TEST_EMAIL_SENT = "custom_rejected_after_test_email_sent"
+
+# Chemin Jinja complet + fallback HTML
+TEMPLATE_REJECTED = "job_auto_match/templates/emails/candidate_rejected.html"
+DEFAULT_REJECTED_HTML = """
+<div style="font-family: Inter, Arial, sans-serif; line-height:1.5; color:#111">
+  <h2 style="margin:0 0 8px">Résultat de votre évaluation</h2>
+  <p>Bonjour {{ applicant_name or "Candidat" }},</p>
+  <p>Suite à votre évaluation pour le poste <strong>{{ job_title or "—" }}</strong>,
+     nous ne pouvons malheureusement pas donner suite favorablement à votre candidature.</p>
+  {% if score is not none %}
+    <p><strong>Score global :</strong> {{ score }} %</p>
+  {% endif %}
+  <p>Nous vous remercions pour le temps consacré et conserverons votre profil pour des opportunités plus adaptées.</p>
+  <p>Bien cordialement,<br>Équipe Recrutement</p>
+</div>
+""".strip()
+
+
+
+# ——— Imports depuis matching.py ———
+from job_auto_match.job_auto_match.utils.matching import (
+    send_candidate_not_matching_email,
+    send_candidate_invite,
+    _set_flag, _set_text,
+    FIELD_AI_LAST_ERROR
+)
+
+# Flags & helpers (si tu les as définis dans matching.py, on les importe; sinon fallback local)
+try:
+    from job_auto_match.job_auto_match.utils.matching import (
+        _set_flag, _set_text,
+        FLAG_MATCHING_IN_PROGRESS, FLAG_MATCHING_FAILED,
+        FIELD_AI_LAST_ERROR
+    )
+except Exception:
+    # Fallback: versions locales minimales
+    def _set_flag(doc, fieldname: str, value: int):
+        if hasattr(doc, fieldname):
+            setattr(doc, fieldname, 1 if value else 0)
+
+    def _set_text(doc, fieldname: str, value: str, max_len=1000):
+        if hasattr(doc, fieldname):
+            setattr(doc, fieldname, (value or "")[:max_len])
+
+    FLAG_MATCHING_IN_PROGRESS = "custom_is_matching_in_progress"
+    FLAG_MATCHING_FAILED      = "custom_is_matching_failed"
+    FIELD_AI_LAST_ERROR       = "custom_ai_last_error"
+
+
 
 def to_float(x, default=0.0):
     try:
@@ -125,15 +180,37 @@ def completed():
                     "job_title": getattr(candidate, "job_title", "") or assessment_desc,
                     "score": global_score,
                 }
-                subject_template = settings.candidate_rejected_after_test_subject or "Résultat de votre évaluation"
-                subject = frappe.render_template(subject_template, ctx)
-                template_html = settings.candidate_rejected_after_test_template
-                if template_html:
-                    message_html = frappe.render_template(template_html, ctx)
-                else:
-                    message_html = frappe.get_template("candidate_rejected.html").render(ctx)
 
-                frappe.sendmail(recipients=[recipient], subject=subject, message=message_html)
+                subject_tpl = (settings.candidate_rejected_after_test_subject
+                            or "Résultat de votre évaluation")
+                try:
+                    subject = frappe.render_template(subject_tpl, ctx)
+                except Exception:
+                    subject = subject_tpl  # si pas de variable, garder brut
+
+                html_src = (settings.candidate_rejected_after_test_template or "").strip()
+                try:
+                    if html_src:
+                        message_html = frappe.render_template(html_src, ctx)
+                    else:
+                        try:
+                            message_html = frappe.get_template(TEMPLATE_REJECTED).render(ctx)
+                        except TemplateNotFound:
+                            message_html = frappe.render_template(DEFAULT_REJECTED_HTML, ctx)
+
+                    frappe.sendmail(recipients=[recipient], subject=subject, message=message_html)
+                    _set_flag(candidate, FLAG_REJECTED_AFTER_TEST_EMAIL_SENT, 1)
+
+                except Exception as e:
+                    # log propre et flags
+                    try:
+                        safe_title = "[TESTLIFY] Envoi email rejet échoué"[:140]
+                        frappe.log_error(message=f"{frappe.get_traceback()}\n{repr(e)}", title=safe_title)
+                    except Exception:
+                        pass
+                    _set_text(candidate, FIELD_AI_LAST_ERROR, f"Email rejet après test: {e}")
+                    _set_flag(candidate, FLAG_REJECTED_AFTER_TEST_EMAIL_SENT, 0)
+
 
         # 8) Sauvegarde sous utilisateur de service pour éviter PermissionError (workflow)
         service_user = (getattr(settings, "webhook_service_user", None) or "Administrator").strip()
@@ -161,3 +238,40 @@ def completed():
         frappe.log_error(frappe.get_traceback(), "Erreur dans le webhook Testlify")
         frappe.local.response["http_status_code"] = 500
         return {"status": 500, "reason": str(e)}
+
+
+
+
+
+@frappe.whitelist()
+def retry_matching(applicant_name: str):
+    doc = frappe.get_doc("Job Applicant", applicant_name)
+    _set_text(doc, FIELD_AI_LAST_ERROR, "")
+    _set_flag(doc, FLAG_MATCHING_FAILED, 0)
+    _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 1)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    enqueue(
+        "job_auto_match.job_auto_match.utils.matching.process_job_applicant_matching",
+        applicant_name=doc.name,
+        queue="long",
+        timeout=300,
+        now=False
+    )
+    return {"ok": True, "message": f"Relance matching planifiée pour {doc.name}"}
+
+@frappe.whitelist()
+def resend_not_match_email(applicant_name: str):
+    doc = frappe.get_doc("Job Applicant", applicant_name)
+    send_candidate_not_matching_email(doc)
+    return {"ok": True, "message": "E-mail 'non retenu' renvoyé."}
+
+@frappe.whitelist()
+def resend_invites(applicant_name: str):
+    doc = frappe.get_doc("Job Applicant", applicant_name)
+    # Utilise la fiche liée au titre du job
+    fiche = frappe.get_doc("Job Opening", doc.job_title or "")
+    res = send_candidate_invite(doc, fiche.custom_assessments)
+    return {"ok": True, "result": res}
+
