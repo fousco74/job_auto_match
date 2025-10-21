@@ -20,20 +20,20 @@
  {
   "docstatus": 0,
   "doctype": "Workflow State",
-  "icon": "",
-  "modified": "2025-09-16 10:19:18.202282",
-  "name": "Open",
-  "style": "",
-  "workflow_state_name": "Open"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow State",
   "icon": "remove",
   "modified": "2025-08-18 22:38:14.951089",
   "name": "Rejected",
   "style": "Danger",
   "workflow_state_name": "Rejected"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2025-09-16 10:19:18.202282",
+  "name": "Open",
+  "style": "",
+  "workflow_state_name": "Open"
  },
  {
   "docstatus": 0,
@@ -48,10 +48,10 @@
   "docstatus": 0,
   "doctype": "Workflow State",
   "icon": "",
-  "modified": "2025-09-16 10:22:34.877965",
+  "modified": "2025-10-02 18:19:55.827095",
   "name": "Accepted",
-  "style": "",
-  "workflow_state_name": "accepted"
+  "style": "Success",
+  "workflow_state_name": "Accepted"
  },
  {
   "docstatus": 0,
@@ -66,9 +66,9 @@
   "docstatus": 0,
   "doctype": "Workflow State",
   "icon": "",
-  "modified": "2025-09-16 10:21:59.396165",
+  "modified": "2025-10-02 18:20:43.394275",
   "name": "In qualification process",
-  "style": "",
+  "style": "Info",
   "workflow_state_name": "In qualification process"
  }
 ]
