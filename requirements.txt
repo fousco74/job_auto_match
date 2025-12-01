@@ -3,4 +3,4 @@ google.genai
 python-docx
 bs4
 mammoth
-BeautifulSoup
+beautifulsoup4

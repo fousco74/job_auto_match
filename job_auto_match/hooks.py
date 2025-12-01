@@ -246,25 +246,7 @@ doc_events = {
 # }
 
 fixtures = [
-    # --- Doctypes métier du recrutement ---
-    {"doctype": "Staffing Plan"},
-    {"doctype": "Job Requisition"},
-    {"doctype": "Job Opening"},
-    {"doctype": "Job Applicant"},
-    {"doctype": "Job Offer"},
-    {"doctype": "Employee Referral"},
-
-    # Gestion des entretiens
-    {"doctype": "Interview Type"},
-    {"doctype": "Interview Round"},
-    {"doctype": "Interview"},
-    {"doctype": "Interview Feedback"},
-
-    # Nominations et lettres d'embauche
-    {"doctype": "Appointment"},
-    {"doctype": "Appointment Letter Template"},
-    {"doctype": "Appointment Letter"},
-
+   
     # Rapports liés au recrutement
     {"doctype": "Report", "filters": [["ref_doctype", "in", [
         "Job Requisition", "Job Opening", "Job Applicant", "Job Offer",
