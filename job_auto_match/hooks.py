@@ -30,7 +30,7 @@ app_license = "mit"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/job_auto_match/css/job_auto_match.css"
-# web_include_js = "/assets/job_auto_match/js/job_auto_match.js"
+web_include_js = "/assets/job_auto_match/js/website.js"
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "job_auto_match/public/scss/website"
@@ -246,32 +246,6 @@ doc_events = {
 # }
 
 fixtures = [
-    # --- Doctypes métier du recrutement ---
-    {"doctype": "Staffing Plan"},
-    {"doctype": "Job Requisition"},
-    {"doctype": "Job Opening"},
-    {"doctype": "Job Applicant"},
-    {"doctype": "Job Offer"},
-    {"doctype": "Employee Referral"},
-
-    # Gestion des entretiens
-    {"doctype": "Interview Type"},
-    {"doctype": "Interview Round"},
-    {"doctype": "Interview"},
-    {"doctype": "Interview Feedback"},
-
-    # Nominations et lettres d'embauche
-    {"doctype": "Appointment"},
-    {"doctype": "Appointment Letter Template"},
-    {"doctype": "Appointment Letter"},
-
-    # Rapports liés au recrutement
-    {"doctype": "Report", "filters": [["ref_doctype", "in", [
-        "Job Requisition", "Job Opening", "Job Applicant", "Job Offer",
-        "Interview", "Appointment"
-    ]]]},
-
-    # --- Personnalisations et automatisations ---
     # Champs personnalisés liés au recrutement
     {"doctype": "Custom Field", "filters": [["dt", "in", [
         "Staffing Plan", "Job Requisition", "Job Opening",
@@ -291,32 +265,6 @@ fixtures = [
 
     # États de Workflow
     {"doctype": "Workflow State"},
-
-    # Scripts côté serveur
-    {"doctype": "Server Script", "filters": [["reference_doctype", "in", [
-        "Staffing Plan", "Job Requisition", "Job Opening",
-        "Job Applicant", "Job Offer", "Interview", "Appointment"
-    ]]]},
-
-    # Scripts côté client
-    {"doctype": "Client Script", "filters": [["dt", "in", [
-        "Staffing Plan", "Job Requisition", "Job Opening",
-        "Job Applicant", "Job Offer", "Interview", "Appointment"
-    ]]]},
-
-    # Notifications liées au recrutement
-    {"doctype": "Notification", "filters": [["document_type", "in", [
-        "Job Applicant", "Job Offer", "Interview", "Appointment"
-    ]]]},
-
-    # Alertes email et modèles
-    {"doctype": "Email Template", "filters": [["name", "like", "%Job%"]]},
-
-    # Paramétrages automatiques (Auto Email Reports, etc.)
-    {"doctype": "Auto Email Report", "filters": [["report", "in", [
-        "Job Openings Report", "Job Applicants Report"
-    ]]]},
-
     # Scripts de type Workflow Action
     {"doctype": "Workflow Action Master"}
 ]

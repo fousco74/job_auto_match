@@ -2,6 +2,15 @@
  {
   "docstatus": 0,
   "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2025-09-25 11:10:47.750268",
+  "name": "Accepted 1",
+  "style": "",
+  "workflow_state_name": "Accepted 1"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
   "icon": "question-sign",
   "modified": "2025-08-18 22:38:14.947288",
   "name": "Pending",
