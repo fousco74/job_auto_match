@@ -246,7 +246,6 @@ doc_events = {
 # }
 
 fixtures = [
-    # Champs personnalisés liés au recrutement
     {"doctype": "Custom Field", "filters": [["dt", "in", [
         "Staffing Plan", "Job Requisition", "Job Opening",
         "Job Applicant", "Job Offer", "Interview", "Appointment"
