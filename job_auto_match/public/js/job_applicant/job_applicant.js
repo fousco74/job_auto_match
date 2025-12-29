@@ -65,15 +65,13 @@ frappe.ui.form.on('Job Applicant', {
 
 // Fonction pour récupérer le job_title réel depuis Job Opening
 function update_custom_job_title(frm) {
-    if(frm.doc.job_title) {
+    if(frm.doc.job_title && !frm.doc.custom_nom_de_loffre) {
         frappe.db.get_value('Job Opening', frm.doc.job_title, 'job_title')
         .then(r => {
             if(r && r.message) {
                 frm.set_value('custom_nom_de_loffre', r.message.job_title);
             }
         });
-    } else {
-        frm.set_value('custom_nom_de_loffre', '');
     }
 }
 
