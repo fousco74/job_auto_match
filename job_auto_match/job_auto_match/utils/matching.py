@@ -271,7 +271,7 @@ def send_candidate_not_matching_email(doc):
 
         ctx = {
             "applicant_name": getattr(doc, "applicant_name", ""),
-            "job_title": getattr(doc, "job_title", ""),
+            "job_title": getattr(doc, "custom_nom_de_loffre", ""),
             "score": getattr(doc, "custom_matching_score", None),
             "justification": getattr(doc, "custom_justification", "") or "",
         }
@@ -374,8 +374,8 @@ def send_candidate_invite(doc, assessments: list) -> list:
             if status == 200:
                 
                 any_success = True
-                if hasattr(doc, "assessments"):
-                    doc.append("assessments", {
+                if hasattr(doc, "custom_assessments"):
+                    doc.append("custom_assessments", {
                         "assessment_name": assessment_name,
                         "assessment_id": assessment_id,
                         "sent": 1
