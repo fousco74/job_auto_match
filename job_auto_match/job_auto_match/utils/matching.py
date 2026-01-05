@@ -441,6 +441,9 @@ def process_job_applicant_matching(applicant_name):
     try:
         fiche = frappe.get_doc("Job Opening", doc.job_title or "")
         site_url = settings.site_url
+        
+        if fiche.custom_active_cv_auto_matching == 0:
+            raise ValueError("Job auto match desable") 
 
         if not doc.resume_attachment:
             raise ValueError("Le candidat n'a pas de pièce jointe 'resume_attachment'")
