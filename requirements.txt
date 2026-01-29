@@ -1,5 +1,4 @@
 httpx
-20
 python-docx
 bs4
 mammoth
