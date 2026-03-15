@@ -174,33 +174,6 @@ def validate_unique_application(doc, method=None):
 
 
 
-def sync_job_applicant_status(doc, method=None):
-    """
-    Centralise la synchronisation entre custom_status_x et workflow_state.
-    Comme on est dans 'on_update' (après save), il faut persister la MAJ explicitement.
-    """
-    status = (getattr(doc, "custom_status_x", None) or "").strip()
-    if not status:
-        return
-
-    # Vérifie que l'état de workflow cible existe
-    if not frappe.db.exists("Workflow State", status):
-        frappe.throw(f"Workflow State introuvable : {status}")
-
-    current = (getattr(doc, "workflow_state", None) or "").strip()
-    if current == status:
-        # Rien à faire
-        return
-
-    # IMPORTANT : 'on_update' est post-save → il faut forcer l'écriture
-    # Utiliser frappe.db.set_value pour éviter une boucle d'événements
-    frappe.db.set_value(doc.doctype, doc.name, "workflow_state", status, update_modified=False)
-
-    # Met à jour l'instance en mémoire (utile pour les logs, autres hooks, etc.)
-    doc.workflow_state = status
-
-    frappe.logger().info(f"[SYNC] workflow_state mis à jour → {status} (via on_update)")
-    
 
 
 

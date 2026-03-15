@@ -21,9 +21,6 @@ from docx.opc.exceptions import PackageNotFoundError
  
 
 
-
-
-
 # --- Flags mapping (adapte si tes fieldnames diffèrent) ---
 FLAG_MATCHING_IN_PROGRESS = "custom_is_matching_in_progress"
 FLAG_MATCHING_FAILED      = "custom_is_matching_failed"
@@ -45,7 +42,6 @@ def _libreoffice_to_pdf_bytes(input_path: str) -> bytes | None:
         base = pathlib.Path(input_path).stem
         pdf_path = pathlib.Path(outdir) / f"{base}.pdf"
         if not pdf_path.exists():
-            # prend n'importe quel .pdf généré si renommé
             pdfs = list(pathlib.Path(outdir).glob("*.pdf"))
             if not pdfs:
                 return None
@@ -54,6 +50,7 @@ def _libreoffice_to_pdf_bytes(input_path: str) -> bytes | None:
     except Exception:
         return None
 
+
 def _extract_text_from_docx(input_path: str) -> str | None:
     """
     Extract text from a .docx file.
@@ -61,7 +58,7 @@ def _extract_text_from_docx(input_path: str) -> str | None:
     """
     # 1) python-docx path (fast & accurate for .docx)
     try:
-        doc = Document(input_path)  # <-- python-docx
+        doc = Document(input_path)
         chunks = []
 
         # paragraphs
@@ -78,10 +75,8 @@ def _extract_text_from_docx(input_path: str) -> str | None:
         if text:
             return text
     except PackageNotFoundError:
-        # file is not a valid .docx package
         pass
     except Exception:
-        # fall through to mammoth
         pass
 
     # 2) Fallback: mammoth (.docx → HTML → plain text)
@@ -105,8 +100,8 @@ def _prepare_resume_parts_for_gemini(file_path: str):
 
     allowed = {
         "application/pdf",
-        "application/msword",  # .doc (legacy)
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
     if mime not in allowed:
         raise ValueError("Format non supporté. Seuls PDF et Word (DOC/DOCX) sont acceptés.")
@@ -119,26 +114,23 @@ def _prepare_resume_parts_for_gemini(file_path: str):
 
     # DOCX
     if mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        # try LO→PDF first (best for preserving layout)
         pdf_bytes = _libreoffice_to_pdf_bytes(file_path)
         if pdf_bytes:
             parts = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")]
             return parts, {"strategy": "word->pdf(lo)", "mime": mime}
 
-        # fallback: text extraction via python-docx/mammoth
         text = _extract_text_from_docx(file_path)
         if text:
             return [text], {"strategy": "word->text", "mime": mime}
 
         raise RuntimeError("Impossible d'extraire le texte du DOCX.")
 
-    # DOC (legacy) → only LibreOffice path is reliable
+    # DOC (legacy)
     if mime == "application/msword":
         pdf_bytes = _libreoffice_to_pdf_bytes(file_path)
         if pdf_bytes:
             parts = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")]
             return parts, {"strategy": "doc->pdf(lo)", "mime": mime}
-        # no python-docx for .doc
         raise RuntimeError(
             "Impossible de convertir le fichier .doc. Installez LibreOffice (soffice) ou fournissez un PDF/DOCX."
         )
@@ -147,11 +139,12 @@ def _prepare_resume_parts_for_gemini(file_path: str):
 def _set_flag(doc, fieldname: str, value: int):
     try:
         if hasattr(doc, fieldname):
-            setattr(doc, fieldname, 1 if value else 0)
+            setattr(doc, fieldname, value if value else 0)
         else:
             frappe.logger().warning(f"[FLAGS] Champ manquant sur Job Applicant: {fieldname}")
     except Exception:
         pass
+
 
 def _set_text(doc, fieldname: str, value: str, max_len=1000):
     try:
@@ -159,6 +152,7 @@ def _set_text(doc, fieldname: str, value: str, max_len=1000):
             setattr(doc, fieldname, (value or "")[:max_len])
     except Exception:
         pass
+
 
 def _safe_log_error(title: str, err: Exception):
     safe_title = (title or "")[:140]
@@ -172,12 +166,21 @@ def _safe_log_error(title: str, err: Exception):
             pass
 
 
+def _save_and_reload(doc):
+    """
+    Sauvegarde le document, commit la transaction, puis recharge le doc
+    depuis la DB pour resynchroniser le timestamp modified.
+    Evite TimestampMismatchError et QueryDeadlockError sur les saves suivants.
+    """
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    doc.reload()
 
 
-
-
+# -----------------------------------------------------------------------------
 
 SAFE_MODEL_CANDIDATES = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+
 
 def call_gemini_with_retry(
     client,
@@ -207,7 +210,6 @@ def call_gemini_with_retry(
                 status = (err.get("status") or "").upper()
                 message = (err.get("message") or str(e))
 
-                # ➜ Modèle non supporté / introuvable → on skip sans retry
                 not_supported = (
                     code in (400, 404) and (
                         "NOT_FOUND" in status
@@ -220,9 +222,8 @@ def call_gemini_with_retry(
                         f"[GEMINI] Skip modèle non supporté: '{model}' ({code}/{status}) : {message}"
                     )
                     last_exc = e
-                    break  # passe au modèle suivant
+                    break
 
-                # ➜ Erreurs transitoires: retry
                 retryable = (
                     code in (429, 500, 502, 503, 504)
                     or "UNAVAILABLE" in status
@@ -239,7 +240,6 @@ def call_gemini_with_retry(
                     time.sleep(sleep)
                     continue
 
-                # ➜ Autres erreurs (ou dernier essai) : on sort
                 last_exc = e
                 break
 
@@ -247,17 +247,12 @@ def call_gemini_with_retry(
                 last_exc = e
                 break
 
-    # si tous les modèles/essais ont échoué
     raise last_exc
-
 
 
 # -----------------------------
 # 1) Email Candidat Non Matching
 # -----------------------------
-
-
-
 
 def send_candidate_not_matching_email(doc):
     TEMPLATE_PATH = "job_auto_match/templates/emails/candidate_not_matching.html"
@@ -286,44 +281,40 @@ def send_candidate_not_matching_email(doc):
             "Information sur votre candidature"
         )
 
-        # 1) si un HTML est saisi dans les settings, on l'utilise
         html_src = getattr(settings, "candidate_not_matching_email_template", "") or ""
         if html_src.strip():
             body = frappe.render_template(html_src, ctx)
         else:
-            # 2) sinon on charge le template fichier (chemin complet)
             body = frappe.get_template(TEMPLATE_PATH).render(ctx)
 
         frappe.sendmail(
             recipients=[recipient],
             subject=subject,
-            message=body,   # (message= recommandé)
+            message=body,
             header=header,
         )
 
         _set_flag(doc, FLAG_NOT_MATCH_EMAIL_SENT, 1)
-        doc.save(ignore_permissions=True)
-        frappe.db.commit()
+        _save_and_reload(doc)  # ← reload après save
         frappe.logger().info(f"[NOT_MATCH_MAIL] Email envoyé à {recipient} avec succès.")
 
     except TemplateNotFound as e:
         _safe_log_error("[NOT_MATCH_MAIL] Template introuvable", e)
         _set_text(doc, FIELD_AI_LAST_ERROR, f"Template introuvable: {e}")
         _set_flag(doc, FLAG_NOT_MATCH_EMAIL_SENT, 0)
-        doc.save(ignore_permissions=True)
-        frappe.db.commit()
+        _save_and_reload(doc)  # ← reload après save
 
     except Exception as e:
         _safe_log_error("[NOT_MATCH_MAIL] Erreur d'envoi", e)
         _set_text(doc, FIELD_AI_LAST_ERROR, f"Email non retenu: {e}")
         _set_flag(doc, FLAG_NOT_MATCH_EMAIL_SENT, 0)
-        doc.save(ignore_permissions=True)
-        frappe.db.commit()
+        _save_and_reload(doc)  # ← reload après save
 
 
 # -----------------------------
 # 2) Invitation Testlify
 # -----------------------------
+
 def send_candidate_invite(doc, assessments: list) -> list:
     results = []
     any_success = False
@@ -372,7 +363,6 @@ def send_candidate_invite(doc, assessments: list) -> list:
                 body = {}
 
             if status == 200:
-                
                 any_success = True
                 if hasattr(doc, "custom_assessments"):
                     doc.append("custom_assessments", {
@@ -380,8 +370,7 @@ def send_candidate_invite(doc, assessments: list) -> list:
                         "assessment_id": assessment_id,
                         "sent": 1
                     })
-                    doc.save(ignore_permissions=True)
-                    frappe.db.commit()
+                    _save_and_reload(doc)  # ← reload après save dans la boucle
                 results.append({"assessment_id": assessment_id, "status": "success"})
             else:
                 msg = body.get('error', {}).get('message') or response.text
@@ -392,20 +381,15 @@ def send_candidate_invite(doc, assessments: list) -> list:
             _set_flag(doc, FLAG_INVITES_SENT, 1)
         else:
             _set_flag(doc, FLAG_INVITES_SENT, 0)
-        doc.save(ignore_permissions=True)
-        frappe.db.commit()
-
+        _save_and_reload(doc)  # ← reload après save final de la boucle
 
     except Exception as e:
         print(f"[INVITE] 💥 ERREUR GLOBALE : {e}")
         frappe.log_error(message=str(e), title="[INVITE] Fatal Error")
-        results.append({"status": "fatal_error", "message": str(e)})
-        
         _safe_log_error("[INVITE] Fatal Error", e)
         _set_text(doc, FIELD_AI_LAST_ERROR, f"Invite: {e}")
         _set_flag(doc, FLAG_INVITES_SENT, 0)
-        doc.save(ignore_permissions=True)
-        frappe.db.commit()
+        _save_and_reload(doc)  # ← reload après save dans le handler d'erreur
         results.append({"status": "fatal_error", "message": str(e)})
 
     return results
@@ -414,6 +398,7 @@ def send_candidate_invite(doc, assessments: list) -> list:
 # -----------------------------
 # 3) Process Matching Candidat
 # -----------------------------
+
 def process_job_applicant_matching(applicant_name):
     settings = frappe.get_single('Job Matching Integration Settings')
     API_KEY = settings.gemini_api_key or "AIzaSyBJPXFY6QE5wiHNkazfHD1-AoJF2GJaF9g"
@@ -424,26 +409,22 @@ def process_job_applicant_matching(applicant_name):
     qualification_score_threshold = settings.qualification_score_threshold or 70
     status_rejected = settings.status_rejected or "Rejected"
     rejected_score = settings.rejected_max_score or 40
-    gemini_error_status = settings.gemini_error_status or "Open" 
-    
-
+    gemini_error_status = settings.gemini_error_status or "Open"
 
     doc = frappe.get_doc("Job Applicant", applicant_name)
-    
-    
+
     # ▶️ Flags: démarrage matching
     _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 1)
     _set_flag(doc, FLAG_MATCHING_FAILED, 0)
     _set_text(doc, FIELD_AI_LAST_ERROR, "")
-    doc.save(ignore_permissions=True)
-    frappe.db.commit()
-    
+    _save_and_reload(doc)  # ← reload après save initial des flags
+
     try:
         fiche = frappe.get_doc("Job Opening", doc.job_title or "")
         site_url = settings.site_url
-        
+
         if fiche.custom_active_cv_auto_matching == 0:
-            raise ValueError("Job auto match desable") 
+            raise ValueError("Job auto match desable")
 
         if not doc.resume_attachment:
             raise ValueError("Le candidat n'a pas de pièce jointe 'resume_attachment'")
@@ -452,19 +433,17 @@ def process_job_applicant_matching(applicant_name):
         if not pathlib.Path(file_path).exists():
             raise FileNotFoundError(f"Fichier introuvable: {file_path}")
 
-        # 🔐 Limiter aux PDF/Word + préparer parts sûrs pour Gemini (pas de DOCX brut)
+        # 🔐 Limiter aux PDF/Word + préparer parts sûrs pour Gemini
         try:
             parts_cv, prep_info = _prepare_resume_parts_for_gemini(file_path)
         except ValueError as bad_fmt:
-            # Rejet propre si format ≠ PDF/DOC/DOCX
             _set_flag(doc, FLAG_MATCHING_FAILED, 0)
             _set_text(doc, FIELD_AI_LAST_ERROR, str(bad_fmt))
-            doc.custom_status_x = status_rejected or "Rejected"
+            doc.status = status_rejected or "Rejected"
             doc.custom_justification = "Rejeté: format non supporté (PDF ou Word uniquement)."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
-            doc.save(ignore_permissions=True)
-            frappe.db.commit()
+            _save_and_reload(doc)  # ← reload avant return
             return
 
         # --- Étape 0 : vérifier que le document est bien un CV ---
@@ -473,7 +452,7 @@ def process_job_applicant_matching(applicant_name):
         Réponds STRICTEMENT en JSON sans markdown:
         {"is_cv": true|false, "reason": "<raison brève en français>"}
         Critères d'un CV: identité/contact, expériences ou projets professionnels, compétences/outils, éducation/diplômes.
-        Exemples NON CV: facture, attestation, lettre simple, offre d’emploi, tract publicitaire, rapport sans section expérience personnelle, photo seule, etc.
+        Exemples NON CV: facture, attestation, lettre simple, offre d'emploi, tract publicitaire, rapport sans section expérience personnelle, photo seule, etc.
         Ne fais aucune supposition si les indices sont absents.
         """
         try:
@@ -483,22 +462,19 @@ def process_job_applicant_matching(applicant_name):
             except Exception:
                 cv_check = json.loads(cv_check_resp.text.strip("```json").strip("```").strip())
         except Exception as e:
-            # si indispo, on continue le flux normal (pas bloquant)
             cv_check = {"is_cv": True, "reason": "classification sautée (moteur indisponible)"}
 
         if not cv_check.get("is_cv", True):
             _set_flag(doc, FLAG_MATCHING_FAILED, 0)
             _set_text(doc, FIELD_AI_LAST_ERROR, "Document non CV")
-            doc.custom_status_x = status_rejected or "Rejected"
+            doc.status = status_rejected or "Rejected"
             doc.custom_justification = f"Rejeté: ce document n'est pas un CV ({cv_check.get('reason','')})."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
-            doc.save(ignore_permissions=True)
-            frappe.db.commit()
+            _save_and_reload(doc)  # ← reload avant return
             return
 
-
-        # --- GEMINI EXTRACTION DU CV --- 
+        # --- GEMINI EXTRACTION DU CV ---
         prompt1 = """
             Rôle: Tu es un(e) recruteur(se) technique senior + analyste CV.
             Contexte: Le premier contenu fourni est le CV du candidat (PDF/image convertie en PDF). Ignore toute mise en page; analyse uniquement le texte.
@@ -507,26 +483,26 @@ def process_job_applicant_matching(applicant_name):
 
             Contraintes générales (IMPORTANTES) :
             - Réponds UNIQUEMENT par le JSON final, sans texte autour, sans balises ``` ni commentaires.
-            - Ne fais AUCUNE référence au PDF, à des pages, ni à l’interface.
-            - Pas d’hallucination: n’invente pas d’entreprises/diplômes non présents. Si une info est absente et non déductible, mets null ou "" (vide). Tu peux estimer UNIQUEMENT si l’indice est fort (ex: “3 ans d’expérience” mentionné explicitement).
-            - Normalise l’orthographe, supprime doublons, et rends les noms propres avec capitalisation correcte.
-            - Langue de sortie: FRANÇAIS (sauf noms d’outils/technos qui gardent leur orthographe canonique).
+            - Ne fais AUCUNE référence au PDF, à des pages, ni à l'interface.
+            - Pas d'hallucination: n'invente pas d'entreprises/diplômes non présents. Si une info est absente et non déductible, mets null ou "" (vide). Tu peux estimer UNIQUEMENT si l'indice est fort (ex: "3 ans d'expérience" mentionné explicitement).
+            - Normalise l'orthographe, supprime doublons, et rends les noms propres avec capitalisation correcte.
+            - Langue de sortie: FRANÇAIS (sauf noms d'outils/technos qui gardent leur orthographe canonique).
             - Respecte les types:
             - age: entier (ou null si inconnu/non déductible)
             - annee_experience: entier (approximation prudente permise si des indices explicites existent)
             - phone: liste de chaînes, format international si possible (+225…, sinon version la plus propre)
             - annee (dans expériences/diplômes): année sur 4 chiffres sous forme de chaîne (ex: "2023")
             - Distinction claire:
-            - competences = compétences métiers / hard skills (ex: “gestion de projet”, “data analysis”)
-            - outils = langages, frameworks, plateformes, logiciels, bases de données (ex: “Python”, “React”, “MySQL”, “SAP”)
+            - competences = compétences métiers / hard skills (ex: "gestion de projet", "data analysis")
+            - outils = langages, frameworks, plateformes, logiciels, bases de données (ex: "Python", "React", "MySQL", "SAP")
             - Canonicalise les synonymes évidents: js→JavaScript, ts→TypeScript, node→Node.js, react→React.js, c sharp→C#, ms office→Microsoft Office, etc.
             - Filtrage:
-            - Retire les termes trop génériques “informatique”, “web”, “bureautique” si non pertinents.
+            - Retire les termes trop génériques "informatique", "web", "bureautique" si non pertinents.
             - Limite competences et outils aux éléments pertinents et non redondants (max ~15 chacun), triés par pertinence (récence + fréquence + adéquation poste).
             - Expérience (experience_professionnelle):
-            - Liste d’entrées {annee, titre, description} en ordre anté-chronologique (du plus récent au plus ancien).
-            - “annee” = année de DÉBUT du poste si période connue (ex: 2021–2023 ⇒ "2021"), sinon l’année la plus mentionnée pour ce rôle.
-            - titre = intitulé de poste normalisé (ex: “Développeur Python”, “Comptable stagiaire”)
+            - Liste d'entrées {annee, titre, description} en ordre anté-chronologique (du plus récent au plus ancien).
+            - "annee" = année de DÉBUT du poste si période connue (ex: 2021–2023 ⇒ "2021"), sinon l'année la plus mentionnée pour ce rôle.
+            - titre = intitulé de poste normalisé (ex: "Développeur Python", "Comptable stagiaire")
             - description = 1–2 phrases synthétiques (missions/impacts/outils clés).
             - Déduplique les postes quasi-identiques.
             - Diplômes (diplomes):
@@ -535,9 +511,9 @@ def process_job_applicant_matching(applicant_name):
                 - BTS/DUT/DEUG/Associate ≤ Bac+2 ⇒ "Under Graduate"
                 - Licence/Bachelor/Ingénieur Bac+3/Bac+4 ⇒ "Graduate"
                 - Master/MSc/MBA/Ingénieur Bac+5/Doctorat/PhD ⇒ "Post Graduate"
-            - annee = année d’obtention si trouvable, sinon l’année la plus probable citée.
-            - Niveau d’étude (niveau_etude): format “BAC+N” si déductible, sinon "".
-            - Années d’expérience (annee_experience): calcule prudemment depuis les périodes indiquées (évite addition naïve si chevauchements); si seulement “junior/senior” est mentionné, convertis prudemment (ex: “junior”≈1–2, “senior”≈5–8), sinon 0.
+            - annee = année d'obtention si trouvable, sinon l'année la plus probable citée.
+            - Niveau d'étude (niveau_etude): format "BAC+N" si déductible, sinon "".
+            - Années d'expérience (annee_experience): calcule prudemment depuis les périodes indiquées (évite addition naïve si chevauchements); si seulement "junior/senior" est mentionné, convertis prudemment (ex: "junior"≈1–2, "senior"≈5–8), sinon 0.
 
             Schéma EXACT à produire (ne change pas les clés, ni la structure) :
             {
@@ -571,13 +547,13 @@ def process_job_applicant_matching(applicant_name):
             }
             }
 
-            Procédure d’extraction (suivre rigoureusement) :
+            Procédure d'extraction (suivre rigoureusement) :
             1) Lire tout le texte, tolérer OCR/scan. Ignorer entêtes/pieds de page répétitifs.
-            2) Identifier nom complet (first_name/last_name) même si inversé (ex: “DUPONT Marie”).
-            3) Extraire emails/phones/lieux même s’ils apparaissent dans l’en-tête/pied.
+            2) Identifier nom complet (first_name/last_name) même si inversé (ex: "DUPONT Marie").
+            3) Extraire emails/phones/lieux même s'ils apparaissent dans l'en-tête/pied.
             4) Détecter et normaliser OUTILS vs COMPÉTENCES (voir règles ci-dessus).
             5) Construire expérience_professionnelle propre (max ~8 entrées représentatives).
-            6) Diplômes: niveau + mapping “level” selon règles énoncées (très important).
+            6) Diplômes: niveau + mapping "level" selon règles énoncées (très important).
             7) Déduire annee_experience si faisable, sinon null.
             8) Valider la cohérence (types, formats, années 19xx/20xx plausibles).
             9) Sortie: JSON valide, aucune clé manquante, aucune clé additionnelle.
@@ -595,14 +571,12 @@ def process_job_applicant_matching(applicant_name):
             _set_flag(doc, FLAG_MATCHING_FAILED, 1)
             _set_text(doc, FIELD_AI_LAST_ERROR, str(e))
             _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
-            doc.custom_status_x = gemini_error_status
+            doc.status = gemini_error_status
             doc.custom_justification = "Analyse automatique momentanément indisponible. Traitement manuel."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
-            doc.save(ignore_permissions=True)
-            frappe.db.commit()
+            _save_and_reload(doc)  # ← reload avant return
             return
-
 
         try:
             candidate_json = json.loads(response1.text)
@@ -614,84 +588,92 @@ def process_job_applicant_matching(applicant_name):
 
         # --- MISE À JOUR DU CANDIDAT ---
         info = candidate_json.get("candidate_info", {})
-        if info.get("age"): 
-            doc.custom_old = info["age"] 
-            
-        if info.get("first_name"): 
-            doc.custom_first_name = info["first_name"] 
-            
-        if info.get("last_name"): 
-            doc.custom_last_name = info["last_name"] 
-        
-        
-        if info.get("annee_experience"): 
-            doc.custom_minimum_experience = info["annee_experience"] 
-        
-        
-        if info.get("niveau_etude"): 
-            doc.custom_study_level = info["niveau_etude"] 
-            
-        if hasattr(doc, "custom_outils"): 
-            doc.set("custom_outils", []) 
-            for outil in info.get("outils", []): 
-                doc.append("custom_outils", {"outil_name": outil}) 
-                
-        if hasattr(doc, "custom_skills"): 
-            doc.set("custom_skills", []) 
-            for skill in info.get("competences", []): 
-                doc.append("custom_skills", {"skill_name": skill}) 
-                
-        if hasattr(doc, "custom_assessments"): 
-            doc.set("custom_assessments", []) 
-            for assessment in fiche.custom_assessments: 
-                doc.append("custom_assessments", { "assessment_id": assessment.id, "assessment_name" : assessment.assessment_name }) 
-                
-        if hasattr(doc, "custom_experiences"): 
-            doc.set("custom_experiences", []) 
-            last_annee = "" 
-            last_title = "" 
-            last_description = "" 
-            for experience in info.get("experience_professionnelle", []): 
-                annee = experience.get("annee", last_annee) 
-                title = experience.get("titre", last_title) 
-                description = experience.get("description", last_description) 
-                
-                # Mise à jour des valeurs précédentes si la clé existe et n'est pas vide 
-                if experience.get("annee"): 
-                    last_annee = experience["annee"] 
-                if experience.get("titre"): 
-                    last_title = experience["titre"] 
-                if experience.get("description"): 
-                    last_description = experience["description"] 
-                
-                doc.append("custom_experiences", { "annee": annee, "title": title, "description": description }) 
-                
-        # Gestion des diplômes 
-        if hasattr(doc, "custom_diplomes"): 
-            doc.set("custom_diplomes", []) 
-            last_annee = "" 
-            last_qualification = "" 
-            last_institution = "" 
-            last_level = "" 
-            for diplome in info.get("diplomes", []): 
-                annee = diplome.get("annee", last_annee) 
-                qualification = diplome.get("diplome", last_qualification) 
-                institution = diplome.get("institution", last_institution) 
-                level = diplome.get("level", last_level) 
-                
-                # Mise à jour des dernières valeurs si elles sont présentes 
-                if diplome.get("annee"): 
-                    last_annee = diplome["annee"] 
-                if diplome.get("diplome"): 
-                    last_qualification = diplome["diplome"] 
-                if diplome.get("institution"): 
-                    last_institution = diplome["institution"]
-                if diplome.get("level"): 
-                    last_level = diplome["level"] 
-                doc.append("custom_diplomes", { "annee": annee, "qualification": qualification, "institution": institution, "level": level })
+        if info.get("age"):
+            doc.custom_old = info["age"]
 
-        doc.save(ignore_permissions=True)
-        frappe.db.commit()
+        if info.get("first_name"):
+            doc.custom_first_name = info["first_name"]
+
+        if info.get("last_name"):
+            doc.custom_last_name = info["last_name"]
+
+        if info.get("annee_experience"):
+            doc.custom_minimum_experience = info["annee_experience"]
+
+        if info.get("niveau_etude"):
+            doc.custom_study_level = info["niveau_etude"]
+
+        if hasattr(doc, "custom_outils"):
+            doc.set("custom_outils", [])
+            for outil in info.get("outils", []):
+                doc.append("custom_outils", {"outil_name": outil})
+
+        if hasattr(doc, "custom_skills"):
+            doc.set("custom_skills", [])
+            for skill in info.get("competences", []):
+                doc.append("custom_skills", {"skill_name": skill})
+
+        if hasattr(doc, "custom_assessments"):
+            doc.set("custom_assessments", [])
+            for assessment in fiche.custom_assessments:
+                doc.append("custom_assessments", {
+                    "assessment_id": assessment.id,
+                    "assessment_name": assessment.assessment_name
+                })
+
+        if hasattr(doc, "custom_experiences"):
+            doc.set("custom_experiences", [])
+            last_annee = ""
+            last_title = ""
+            last_description = ""
+            for experience in info.get("experience_professionnelle", []):
+                annee = experience.get("annee", last_annee)
+                title = experience.get("titre", last_title)
+                description = experience.get("description", last_description)
+
+                if experience.get("annee"):
+                    last_annee = experience["annee"]
+                if experience.get("titre"):
+                    last_title = experience["titre"]
+                if experience.get("description"):
+                    last_description = experience["description"]
+
+                doc.append("custom_experiences", {
+                    "annee": annee,
+                    "title": title,
+                    "description": description
+                })
+
+        # Gestion des diplômes
+        if hasattr(doc, "custom_diplomes"):
+            doc.set("custom_diplomes", [])
+            last_annee = ""
+            last_qualification = ""
+            last_institution = ""
+            last_level = ""
+            for diplome in info.get("diplomes", []):
+                annee = diplome.get("annee", last_annee)
+                qualification = diplome.get("diplome", last_qualification)
+                institution = diplome.get("institution", last_institution)
+                level = diplome.get("level", last_level)
+
+                if diplome.get("annee"):
+                    last_annee = diplome["annee"]
+                if diplome.get("diplome"):
+                    last_qualification = diplome["diplome"]
+                if diplome.get("institution"):
+                    last_institution = diplome["institution"]
+                if diplome.get("level"):
+                    last_level = diplome["level"]
+
+                doc.append("custom_diplomes", {
+                    "annee": annee,
+                    "qualification": qualification,
+                    "institution": institution,
+                    "level": level
+                })
+
+        _save_and_reload(doc)  # ← reload après save des données CV extraites
 
         job_json = {
             "skills": [r.skill for r in fiche.custom_skills],
@@ -702,7 +684,7 @@ def process_job_applicant_matching(applicant_name):
         }
 
         prompt2 = f"""
-            Rôle: Tu es un(e) recruteur(se) technique senior chargé(e) d'évaluer l’adéquation CV ↔ fiche de poste de façon rigoureuse, reproductible et sans hallucination.
+            Rôle: Tu es un(e) recruteur(se) technique senior chargé(e) d'évaluer l'adéquation CV ↔ fiche de poste de façon rigoureuse, reproductible et sans hallucination.
 
             Entrées:
             - Profil candidat (JSON structuré du CV)
@@ -714,49 +696,49 @@ def process_job_applicant_matching(applicant_name):
             ⚖️ Barème (total = 100) — critères optionnels:
             - Compétences (skills): 40 pts
             - Outils/Technologies (outils): 25 pts
-            - Niveau d’études (study_level): 15 pts
+            - Niveau d'études (study_level): 15 pts
             - Expérience (minimum_experience): 20 pts
 
             Si un critère est absent/non renseigné dans la fiche de poste, redistribue proportionnellement son poids sur les critères restants (ex.: si seuls skills et outils présents, ils pèsent 40/(40+25)=61.54% et 25/(40+25)=38.46%, puis normalisés à 100).
 
-            🔎 Règles d’évaluation par critère (précises):
+            🔎 Règles d'évaluation par critère (précises):
             1) Compétences (skills)
             - Normalise (minuscules, pluriels simples, accents, variantes). Déduplique.
-            - Correspondances acceptées: synonymes proches (ex.: “gestion de projet” ~ “project management”).
-            - Priorise explicitement les **must-have** s’ils sont identifiables dans la description de la fiche (mots-clés: “obligatoire”, “indispensable”, “requis”, “must-have”).
-            - Bonus SI la compétence est **démontrée** dans des projets/missions proches des activités du poste (preuve par description d’expérience).
+            - Correspondances acceptées: synonymes proches (ex.: "gestion de projet" ~ "project management").
+            - Priorise explicitement les **must-have** s'ils sont identifiables dans la description de la fiche (mots-clés: "obligatoire", "indispensable", "requis", "must-have").
+            - Bonus SI la compétence est **démontrée** dans des projets/missions proches des activités du poste (preuve par description d'expérience).
             - Score = couverture pondérée des compétences requises (plus fort poids pour must-have), avec crédit partiel pour équivalents proches.
 
             2) Outils/Technos (outils)
-            - Équivalences acceptées: JS=JavaScript, TS=TypeScript, Node=Node.js, React=React.js, Express=Express.js, SQL~PostgreSQL/MySQL/SQL Server (selon contexte), MS Office~Microsoft Office, etc. Versions voisines acceptées si l’écosystème est identique.
+            - Équivalences acceptées: JS=JavaScript, TS=TypeScript, Node=Node.js, React=React.js, Express=Express.js, SQL~PostgreSQL/MySQL/SQL Server (selon contexte), MS Office~Microsoft Office, etc. Versions voisines acceptées si l'écosystème est identique.
             - Compte les familles/outils équivalents, mais évite le double comptage.
             - Score = couverture pondérée des outils requis + pertinence démontrée en projet.
 
-            3) Niveau d’études (study_level)
+            3) Niveau d'études (study_level)
             - Mappe les équivalences (Licence=Bachelor, Master=MS/MSc, Bac+5=M2/Ingénieur, etc.).
             - Si le candidat est en dessous du niveau requis → pénalité proportionnelle (forte si écart net).
             - Si au-dessus ou équivalent → validation simple (pas de sur-bonus).
 
             4) Expérience (minimum_experience)
             - Compare **années pertinentes** (même domaine/tech stack/responsabilités) au minimum requis.
-            - Si < minimum: pénalité proportionnelle à l’écart.
+            - Si < minimum: pénalité proportionnelle à l'écart.
             - Si > minimum: pas de bonus automatique sans pertinence claire (projets/secteur proches).
             - Privilégie la **récence** et la **pertinence** des missions par rapport aux activités principales du poste.
 
             🧭 Contexte & pertinence:
             - Utilise la description de la fiche (missions/activités) pour juger la similarité des projets vécus par le candidat (secteur, responsabilités, impact, environnement technique).
-            - Aucune source externe. Toute information manquante dans CV/fiche = non satisfaite (pas d’invention).
+            - Aucune source externe. Toute information manquante dans CV/fiche = non satisfaite (pas d'invention).
 
             🧹 Normalisation/qualité:
             - Traite tout en minuscules pour matcher; garde les noms propres/technos dans leur forme canonique lors de la rédaction de la justification.
             - Évite de pénaliser deux fois le même écart.
-            - Rends un score **entier** 0–100 (arrondi à l’unité).
+            - Rends un score **entier** 0–100 (arrondi à l'unité).
 
             🧾 Sortie STRICTE (aucun texte autour, pas de markdown):
             - "score": entier [0..100]
             - "justification": 1 à 5 phrases max, en français, mentionnant:
             - 1–2 forces principales (ex.: compétences/outils alignés, projet très proche)
-            - 1–2 écarts majeurs (ex.: must-have manquant, années d’expérience insuffisantes, niveau d’études inférieur)
+            - 1–2 écarts majeurs (ex.: must-have manquant, années d'expérience insuffisantes, niveau d'études inférieur)
 
             Données à évaluer:
 
@@ -769,7 +751,7 @@ def process_job_applicant_matching(applicant_name):
             Rends UNIQUEMENT ce JSON :
             {{
             "score": <entier entre 0 et 100>,
-            "justification": "<jusqu’à 5 phrases expliquant objectivement les points forts et les écarts, sans détails superflus>"
+            "justification": "<jusqu'à 5 phrases expliquant objectivement les points forts et les écarts, sans détails superflus>"
             }}
             """
 
@@ -780,12 +762,11 @@ def process_job_applicant_matching(applicant_name):
             _set_flag(doc, FLAG_MATCHING_FAILED, 1)
             _set_text(doc, FIELD_AI_LAST_ERROR, str(e))
             _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
-            doc.custom_status_x = gemini_error_status
+            doc.status = gemini_error_status
             doc.custom_justification = "Matching indisponible (surcharge moteur). Reprise auto ou traitement manuel."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
-            doc.save(ignore_permissions=True)
-            frappe.db.commit()
+            _save_and_reload(doc)  # ← reload avant return
             return
 
         try:
@@ -802,12 +783,11 @@ def process_job_applicant_matching(applicant_name):
             doc.applicant_rating = float(f"{rating:.2f}")
 
             if score <= rejected_score:
-                doc.custom_status_x = status_rejected
+                doc.status = status_rejected
             else:
-                doc.custom_status_x = qualified_status if score >= qualification_score_threshold else  status_not_qualified
-                
-            doc.save(ignore_permissions=True)
-            frappe.db.commit()
+                doc.status = qualified_status if score >= qualification_score_threshold else status_not_qualified
+
+            _save_and_reload(doc)  # ← reload après save du score de matching
 
         if matching_score.get("score", 0) >= 70:
             send_candidate_invite(doc, fiche.custom_assessments)
@@ -816,7 +796,11 @@ def process_job_applicant_matching(applicant_name):
 
         print("=== SCORE DE MATCHING ===")
         print(json.dumps(matching_score, indent=2, ensure_ascii=False))
-        _set_flag(doc, FLAG_MATCHING_FAILED, 0)
+        _set_flag(doc, FLAG_MATCHING_FAILED, 0)            
+        _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
+        doc.reload()  # ← resync timestamp avant le dernier save
+
+
 
     except Exception as e:
         _safe_log_error("[MATCHING] Erreur globale", e)
@@ -824,9 +808,12 @@ def process_job_applicant_matching(applicant_name):
         _set_text(doc, FIELD_AI_LAST_ERROR, str(e))
         raise
     finally:
-        # ▶️ Fin de cycle
+        # ▶️ Fin de cycle — on recharge avant le save final pour éviter le conflit
+        _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
+        try:
+            doc.reload()  # ← resync timestamp avant le dernier save
+        except Exception:
+            pass
         _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
         doc.save(ignore_permissions=True)
         frappe.db.commit()
-        
-

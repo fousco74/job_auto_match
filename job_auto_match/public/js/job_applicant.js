@@ -47,10 +47,6 @@ frappe.ui.form.on('Job Applicant', {
         `Dernière erreur IA: ${frappe.utils.escape_html(frm.doc.custom_ai_last_error || '')}`,
         'red'
       );
-    } else if (emailSent) {
-      frm.dashboard.set_headline_alert('E-mail “Non retenu” envoyé', 'green');
-    } else if (invites) {
-      frm.dashboard.set_headline_alert('Invitations envoyées', 'green');
     }
   
 

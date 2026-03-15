@@ -43,7 +43,7 @@ web_include_js = "/assets/job_auto_match/js/website.js"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-doctype_js = {"Job Applicant" : "public/js/job_applicant/job_applicant.js"}
+doctype_js = {"Job Applicant" : "public/js/job_applicant.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -142,8 +142,7 @@ doctype_js = {"Job Applicant" : "public/js/job_applicant/job_applicant.js"}
 doc_events = {
     "Job Applicant": {
         "after_insert": "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.enqueue_matching",
-        "before_insert" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.validate_unique_application",
-        "on_update" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.sync_job_applicant_status"
+        "before_insert" : "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.validate_unique_application",    
     }
 }
 
