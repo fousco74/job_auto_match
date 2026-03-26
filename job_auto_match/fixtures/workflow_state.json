@@ -3,6 +3,15 @@
   "docstatus": 0,
   "doctype": "Workflow State",
   "icon": "",
+  "modified": "2026-02-27 11:29:09.483713",
+  "name": "Annulé",
+  "style": "",
+  "workflow_state_name": "Annulé"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
   "modified": "2025-09-25 11:10:47.750268",
   "name": "Accepted 1",
   "style": "",
@@ -79,5 +88,158 @@
   "name": "In qualification process",
   "style": "Info",
   "workflow_state_name": "In qualification process"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2025-06-27 14:55:16.695882",
+  "name": "Initiated",
+  "style": "",
+  "workflow_state_name": "Initiated"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2025-06-27 16:12:41.379987",
+  "name": "Draft",
+  "style": "",
+  "workflow_state_name": "Draft"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2025-06-27 16:18:38.530934",
+  "name": "KYC Pending",
+  "style": "",
+  "workflow_state_name": "KYC Pending"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2025-06-27 16:27:34.607514",
+  "name": "KYC Complete",
+  "style": "",
+  "workflow_state_name": "KYC Complete"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-20 09:40:06.663047",
+  "name": "Incoming",
+  "style": "",
+  "workflow_state_name": "Incoming"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-20 09:40:06.826370",
+  "name": "Scrubbing",
+  "style": "",
+  "workflow_state_name": "Scrubbing"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-20 09:40:06.831100",
+  "name": "Pre-Qualification",
+  "style": "",
+  "workflow_state_name": "Pre-Qualification"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-20 09:40:06.834616",
+  "name": "Pre-Qualified",
+  "style": "",
+  "workflow_state_name": "Pre-Qualified"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-20 09:40:06.838062",
+  "name": "Qualified",
+  "style": "",
+  "workflow_state_name": "Qualified"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-20 09:40:06.842870",
+  "name": "Converted",
+  "style": "",
+  "workflow_state_name": "Converted"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-23 16:45:15.979265",
+  "name": "En attente Compta",
+  "style": "",
+  "workflow_state_name": "En attente Compta"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-04 11:19:37.531797",
+  "name": "En attente facturation",
+  "style": "Warning",
+  "workflow_state_name": "En attente facturation"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-04 11:17:37.569962",
+  "name": "Brouillon",
+  "style": "Info",
+  "workflow_state_name": "Brouillon"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-04 11:20:10.730682",
+  "name": "En attente DG",
+  "style": "Warning",
+  "workflow_state_name": "En attente DG"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-04 11:18:01.207783",
+  "name": "Rejeté",
+  "style": "Danger",
+  "workflow_state_name": "Rejeté"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-04 11:19:11.684510",
+  "name": "Approuvé",
+  "style": "Success",
+  "workflow_state_name": "Approuvé"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "",
+  "modified": "2026-02-04 11:19:56.141580",
+  "name": "En attente RH",
+  "style": "Warning",
+  "workflow_state_name": "En attente RH"
  }
 ]
