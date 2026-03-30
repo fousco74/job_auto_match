@@ -1,98 +1,71 @@
 import frappe
 from frappe import enqueue
-from frappe.utils import now_datetime, add_to_date
-from datetime import timedelta
 from urllib.parse import urlparse
 import pathlib
 
+RETRY_COOLDOWN_MIN = 5
 
 
-# --------------------------------------
-# Enqueue async pour traitement matching
-# --------------------------------------
-def enqueue_matching(doc, method=None):
-    try:
-        frappe.logger().info(f"[MATCHING] Enqueue pour candidat : {doc.name}")
-        enqueue(
-            "job_auto_match.job_auto_match.utils.matching.process_job_applicant_matching",
-            applicant_name=doc.name,
-            queue="long",
-            timeout=300,  # 5 min
-            now=False
-        )
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "[MATCHING] Échec enqueue")
-        raise
-
-
-# --------------------------------------
-# Helpers internes
-# --------------------------------------
+# ── Helpers ──────────────────────────────────────────────────────────────────
 def _norm(s):
     return (s or "").strip().lower()
 
 
-def _dbg(msg, data=None):
+def _enqueue_matching(applicant_name: str):
+    enqueue(
+        "job_auto_match.job_auto_match.utils.matching.process_job_applicant_matching",
+        applicant_name=applicant_name,
+        queue="long",
+        timeout=300,
+        now=False,
+    )
+
+
+# ── Hooks document ────────────────────────────────────────────────────────────
+def enqueue_matching(doc, method=None):
     try:
-        line = f"[UNIQ_APPLY] {msg}"
-        if data is not None:
-            try:
-                line += f" | {frappe.as_json(data)}"
-            except Exception:
-                line += f" | {data}"
-        print(line)
-        frappe.logger().info(line)
+        frappe.logger().info(f"[MATCHING] Enqueue pour candidat : {doc.name}")
+        _enqueue_matching(doc.name)
     except Exception:
-        pass
+        frappe.log_error(frappe.get_traceback(), "[MATCHING] Échec enqueue")
+        raise
 
 
-# --------------------------------------
-# Validation : éviter candidatures en double + CV PDF/Word
-# --------------------------------------
 def validate_unique_application(doc, method=None):
-    _dbg("Vérification unicité démarrée", {"docname": doc.name})
+    _validate_cv(doc)
+    _validate_no_duplicate(doc)
 
-    # --- Vérification CV : obligatoire et format PDF/Word ---
+
+# ── Validation CV ─────────────────────────────────────────────────────────────
+def _validate_cv(doc):
     resume_url = (getattr(doc, "resume_attachment", "") or "").strip()
     if not resume_url:
         frappe.throw(
-            frappe._("Veuillez joindre votre CV au format PDF ou Word (.pdf, .doc, .docx) avant de soumettre la candidature."),
-            title=frappe._("CV manquant")
+            frappe._("Veuillez joindre votre CV (PDF ou Word) avant de soumettre."),
+            title=frappe._("CV manquant"),
         )
 
-    # Vérification par extension (rapide)
     allowed_ext = {".pdf", ".doc", ".docx"}
     try:
-        path_part = urlparse(resume_url).path  # ex: /files/cv_marie_dupont.pdf
-        ext = pathlib.Path(path_part).suffix.lower()
+        ext = pathlib.Path(urlparse(resume_url).path).suffix.lower()
     except Exception:
         ext = ""
 
     if ext not in allowed_ext:
         frappe.throw(
-            frappe._("Le CV doit être au format PDF ou Word (.pdf, .doc, .docx). Fichier fourni : {0}")
-                   .format(resume_url),
-            title=frappe._("Format de CV non supporté")
+            frappe._("Format CV non supporté : {0}. Utilisez PDF, DOC ou DOCX.").format(ext or resume_url),
+            title=frappe._("Format non supporté"),
         )
 
-    # Vérification (optionnelle) via le doctype File → MIME type
+    # Vérification MIME via le doctype File (non bloquant)
     try:
         file_rec = frappe.get_all(
             "File",
             filters={"file_url": resume_url},
-            fields=["file_url", "file_name", "mime_type"],
+            fields=["mime_type"],
             limit=1,
             ignore_permissions=True,
         )
-        if not file_rec and path_part:
-            # fallback par file_name si nécessaire
-            file_rec = frappe.get_all(
-                "File",
-                filters={"file_name": pathlib.Path(path_part).name},
-                fields=["file_url", "file_name", "mime_type"],
-                limit=1,
-                ignore_permissions=True,
-            )
         if file_rec:
             mime = (file_rec[0].get("mime_type") or "").lower()
             allowed_mime = {
@@ -102,115 +75,83 @@ def validate_unique_application(doc, method=None):
             }
             if mime and mime not in allowed_mime:
                 frappe.throw(
-                    frappe._("Le CV doit être au format PDF ou Word. Type détecté : {0}")
-                           .format(mime),
-                    title=frappe._("Type de fichier non supporté")
+                    frappe._("Type MIME non supporté : {0}.").format(mime),
+                    title=frappe._("Format non supporté"),
                 )
-    except Exception as e:
-        _dbg("Lookup File/mime ignoré (non bloquant)", {"error": str(e)})
+    except frappe.ValidationError:
+        raise
+    except Exception:
+        pass  # non bloquant
 
-    # --- Unicité candidature (email + offre OU email + job title) ---
-    email = _norm(getattr(doc, "email_id", ""))
+
+# ── Dédoublonnage ─────────────────────────────────────────────────────────────
+def _validate_no_duplicate(doc):
+    email       = _norm(getattr(doc, "email_id", ""))
     job_opening = getattr(doc, "job_opening", None)
-    job_title = (getattr(doc, "job_title", "") or "").strip()
-
-    _dbg("Champs d'entrée normalisés", {
-        "email": email,
-        "job_opening": job_opening,
-        "job_title": job_title
-    })
+    job_title   = (getattr(doc, "job_title", "") or "").strip()
 
     if not email:
-        _dbg("Email manquant — aucune validation unicité faite")
         return
 
-    # 👉 Message quand job_title est vide
-    if not job_title:
-        if job_opening:
-            frappe.msgprint(
-                frappe._("L'intitulé du poste (Job Title) n'est pas renseigné. "
-                         "La vérification de doublon se fera sur l'offre (Job Opening) : {0}.")
-                .format(job_opening),
-                alert=True, indicator='orange'
-            )
-        else:
-            frappe.throw(
-                frappe._("Veuillez sélectionner une offre (Job Opening) ou renseigner l'intitulé du poste (Job Title) avant de soumettre la candidature."),
-                title=frappe._("Offre non définie")
-            )
+    if not job_title and not job_opening:
+        frappe.throw(
+            frappe._("Sélectionnez une offre (Job Opening) ou renseignez le poste."),
+            title=frappe._("Offre non définie"),
+        )
 
     filters = {"email_id": email, "docstatus": ["!=", 2]}
     if job_opening:
         filters["job_opening"] = job_opening
-        _dbg("Filtrage par job_opening", filters)
     else:
         filters["job_title"] = job_title
-        _dbg("Filtrage par job_title", filters)
 
-    try:
-        existing = frappe.get_all(
-            "Job Applicant",
-            filters=filters,
-            limit=1,
-            pluck="name",
-            ignore_permissions=True
-        )
-        _dbg("Résultat recherche de doublons", existing)
-    except Exception as e:
-        _dbg("Erreur frappe.get_all", {"error": str(e)})
-        raise
-
+    existing = frappe.get_all(
+        "Job Applicant",
+        filters=filters,
+        limit=1,
+        pluck="name",
+        ignore_permissions=True,
+    )
     if existing:
-        existing_docname = existing[0]
-        msg = frappe._("Vous avez déjà postulé à cette offre. Référence : {0}").format(existing_docname)
         frappe.throw(
-            msg,
-            title=frappe._("Candidature déjà enregistrée"),
-            exc=frappe.ValidationError
+            frappe._("Candidature déjà enregistrée pour cette offre. Référence : {0}").format(existing[0]),
+            title=frappe._("Doublon"),
+            exc=frappe.ValidationError,
         )
 
-    _dbg("Aucun doublon détecté, validation OK")
+
+# ── Synchronisation custom_status ↔ workflow_state ──────────────────────────
+def sync_workflow_state(doc, method=None):
+    """Maintient workflow_state aligné sur custom_status à chaque sauvegarde."""
+    statut = getattr(doc, "custom_status", None)
+    if statut and getattr(doc, "workflow_state", None) != statut:
+        doc.workflow_state = statut
 
 
-
-
-
-
-
-RETRY_COOLDOWN_MIN = 5  # anti-spam : 5 minutes entre relances
-def _can_retry(doc, force=False):
-    """Anti-spam + prérequis (CV)."""
-    if not getattr(doc, "resume_attachment", None):
-        frappe.throw("Aucun CV n'est attaché (resume_attachment).")
-    if force:
-        return True
-    last = getattr(doc, "custom_last_retry_at", None)
-    if last:
-        # si dernier retry < RETRY_COOLDOWN_MIN minutes → bloque
-        if (now_datetime() - last).total_seconds() < RETRY_COOLDOWN_MIN * 60:
-            frappe.throw(f"Vous avez déjà relancé récemment. Réessayez dans {RETRY_COOLDOWN_MIN} minutes.")
-    return True
-
+# ── Retry (appelé aussi depuis api.py) ───────────────────────────────────────
 @frappe.whitelist()
 def retry_matching(applicant_name: str, force: int = 0):
-    """Relance le job de matching pour un candidat."""
-    force = int(force or 0)
+    """Relance le job de matching avec cooldown anti-spam."""
+    from frappe.utils import now_datetime
+
     doc = frappe.get_doc("Job Applicant", applicant_name)
 
-    _can_retry(doc, force=bool(force))
+    if not getattr(doc, "resume_attachment", None):
+        frappe.throw("Aucun CV attaché.")
 
+    if not int(force or 0):
+        last = getattr(doc, "custom_last_retry_at", None)
+        if last:
+            from frappe.utils import get_datetime
+            elapsed = (now_datetime() - get_datetime(last)).total_seconds()
+            if elapsed < RETRY_COOLDOWN_MIN * 60:
+                frappe.throw(
+                    f"Réessayez dans {RETRY_COOLDOWN_MIN} minutes."
+                )
 
-    # Enqueue le traitement long
-    enqueue(
-        "job_auto_match.job_auto_match.utils.matching.process_job_applicant_matching",
-        applicant_name=doc.name,
-        queue="long",
-        timeout=300,
-        now=False
-    )
+    doc.custom_last_retry_at = now_datetime()
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
 
-    return {
-        "ok": True,
-        "queued": True,
-        "message": f"Relance planifiée pour {doc.name}."
-    }
+    _enqueue_matching(doc.name)
+    return {"ok": True, "queued": True, "message": f"Relance planifiée pour {doc.name}."}

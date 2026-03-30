@@ -1,137 +1,185 @@
-<<<<<<< HEAD
-# job_auto_match
+# RecrutIA — v1.0.0
 
+Automatisation du recrutement pour ERPNext/HRMS avec scoring IA (Google Gemini) et intégration Testlify.
 
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Fonctionnement
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.amoaman.com/erp-applications/job_auto_match.git
-git branch -M main
-git push -uf origin main
+Candidature soumise
+      │
+      ▼
+Validation CV (format PDF/Word + dédoublonnage)
+      │
+      ▼
+Extraction structurée du CV par Gemini IA
+      │
+      ▼
+Scoring CV ↔ Fiche de poste (0–100)
+      │
+      ├─ Score ≥ seuil qualification ──► Invitation test Testlify
+      │                                          │
+      │                               Webhook "completed"
+      │                                          │
+      │                               Score ≥ seuil test ──► Statut "après test"
+      │                               Score < seuil test ──► Email rejet
+      │
+      └─ Score < seuil qualification ──► Email "non retenu"
 ```
 
-## Integrate with your tools
+---
 
-- [ ] [Set up project integrations](https://gitlab.amoaman.com/erp-applications/job_auto_match/-/settings/integrations)
+## Prérequis
 
-## Collaborate with your team
+- Frappe Framework ≥ 15
+- ERPNext + **HRMS** installés
+- Python ≥ 3.11
+- LibreOffice installé sur le serveur (conversion DOC → PDF)
+- Compte Google AI Studio (clé Gemini)
+- Compte Testlify (optionnel)
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+---
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
-=======
-### job_auto_match
-
-automatiser le processus de recrutement
-
-### Installation
-
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
 
 ```bash
-cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch develop
-bench install-app job_auto_match
+# 1. Ajouter l'app
+bench get-app job_auto_match https://github.com/AMOAMAN/job_auto_match
+
+# 2. Installer sur le site
+bench --site <nom_du_site> install-app job_auto_match
+
+# 3. Migrer (applique fixtures et migrations)
+bench --site <nom_du_site> migrate
+
+# 4. Construire les assets
+bench build --app job_auto_match
+
+# 5. Redémarrer
+bench restart
 ```
 
-### Contributing
+---
 
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
+## Paramétrage
+
+### 1. Job Matching Integration Settings
+
+Aller dans : **RecrutIA → Job Matching Integration Settings**
+
+#### Gemini IA
+
+| Champ | Obligatoire | Description |
+|-------|-------------|-------------|
+| Clé API Gemini | Oui | Obtenue sur [aistudio.google.com](https://aistudio.google.com) |
+| URL du site | Non | URL de base pour les liens fichiers (ex: `https://erp.monentreprise.com`) |
+
+#### Testlify
+
+| Champ | Description |
+|-------|-------------|
+| URL de base Testlify | Ex: `https://api.testlify.com` |
+| Token API Testlify | Token Bearer pour l'API |
+| Endpoint invitation | Ex: `v1/testlify_candidate_invite` |
+| Token webhook | Token de sécurité reçu dans `X-Webhook-Token` |
+| Utilisateur de service | Utilisateur Frappe pour les webhooks (défaut: `Administrator`) |
+
+#### Seuils et statuts
+
+| Champ | Défaut | Description |
+|-------|--------|-------------|
+| Seuil qualification IA | 70 | Score minimum pour inviter au test |
+| Seuil réussite test | 40 | Score Testlify minimum pour valider |
+| Score max avant rejet direct | 40 | En dessous = rejet immédiat |
+| Statut qualifié | `En Cours de qualification` | Score ≥ seuil IA |
+| Statut non qualifié | `Top Profil` | Score entre rejet et seuil |
+| Statut après test | `Accepté` | Test Testlify réussi |
+| Statut rejeté | `Rejecté` | Score ≤ seuil rejet |
+| Statut erreur Gemini | `Open` | En cas d'indisponibilité IA |
+
+#### Emails
+
+Deux sections configurables avec templates Jinja2 :
+
+**Non retenu (après scoring IA) :**
+```
+{{ applicant_name }}, {{ job_title }}, {{ score }}, {{ justification }}
+```
+
+**Rejeté (après test Testlify) :**
+```
+{{ applicant_name }}, {{ job_title }}, {{ score }}
+```
+
+---
+
+### 2. Configurer les offres (Job Opening)
+
+Pour chaque offre, renseigner dans l'onglet dédié :
+
+| Champ | Description |
+|-------|-------------|
+| `custom_active_cv_auto_matching` | Activer le matching automatique |
+| `custom_skills` | Compétences requises |
+| `custom_outils` | Outils/Technologies requis |
+| `custom_minimum_experience` | Années d'expérience minimales |
+| `custom_study_level` | Niveau d'études requis |
+| `custom_assessments` | Assessments Testlify (colonne `id` = assessmentId Testlify) |
+
+> L'`id` de la table `custom_assessments` est la clé de liaison avec Testlify.
+> Il doit correspondre exactement à l'`assessmentId` de votre workspace.
+
+---
+
+### 3. Webhook Testlify
+
+Dans votre interface Testlify → **Settings → Webhooks** :
+
+- **URL** : `https://<votre-site>/api/v2/method/job_auto_match.api.completed`
+- **Événement** : `candidate.completed`
+- **Header** : `X-Webhook-Token: <votre_token_webhook>`
+
+---
+
+### 4. Permissions
+
+L'utilisateur de service (`webhook_service_user`) doit avoir les droits **Write** sur `Job Applicant`.
+
+---
+
+## Statuts Job Applicant
+
+```
+Open
+ ├── Vivrier                   (vivier, à traiter)
+ ├── Top Profil                (profil intéressant)
+ ├── En Cours de qualification (test Testlify envoyé)
+ ├── Accepté                   (test réussi)
+ └── Rejecté                   (rejet IA ou test)
+```
+
+---
+
+## Mise à jour des fixtures
+
+Après modification de Custom Fields, Property Setters ou Workflow :
 
 ```bash
-cd apps/job_auto_match
-pre-commit install
+bench --site <nom_du_site> export-fixtures --app job_auto_match
+git add job_auto_match/fixtures/
+git commit -m "chore: mise à jour fixtures"
 ```
 
-Pre-commit is configured to use the following tools for checking and formatting your code:
+---
 
-- ruff
-- eslint
-- prettier
-- pyupgrade
+## Désinstallation
 
-### CI
+```bash
+bench --site <nom_du_site> uninstall-app job_auto_match
+bench --site <nom_du_site> migrate
+```
 
-This app can use GitHub Actions for CI. The following workflows are configured:
+---
 
-- CI: Installs this app and runs unit tests on every push to `develop` branch.
-- Linters: Runs [Frappe Semgrep Rules](https://github.com/frappe/semgrep-rules) and [pip-audit](https://pypi.org/project/pip-audit/) on every pull request.
+## Licence
 
-
-### License
-
-mit
->>>>>>> 39c311f (Job auto match work)
+MIT — AMOAMAN

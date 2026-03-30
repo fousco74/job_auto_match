@@ -1,24 +1,18 @@
 import frappe
-import httpx
 import requests
 from google import genai
 from google.genai import types
 from frappe.utils.file_manager import get_file_path
 from urllib.parse import urljoin
-from PIL import Image
 import time
 import random
 from google.genai import errors as genai_errors
 from jinja2 import TemplateNotFound
-import io, json, mimetypes, pathlib, tempfile, shutil, subprocess
+import json, mimetypes, pathlib, tempfile, shutil, subprocess
 import mammoth
 from bs4 import BeautifulSoup
-
-
-# add these:
 from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
- 
 
 
 # --- Flags mapping (adapte si tes fieldnames diffèrent) ---
@@ -27,6 +21,7 @@ FLAG_MATCHING_FAILED      = "custom_is_matching_failed"
 FLAG_NOT_MATCH_EMAIL_SENT = "custom_not_match_email_sent"
 FLAG_INVITES_SENT         = "custom_invites_sent"
 FIELD_AI_LAST_ERROR       = "custom_ai_last_error"
+FIELD_STATUT              = "custom_status"
 
 
 # ---------- Helpers: Word→PDF/texte & préparation des "parts" ----------
@@ -150,6 +145,15 @@ def _set_text(doc, fieldname: str, value: str, max_len=1000):
     try:
         if hasattr(doc, fieldname):
             setattr(doc, fieldname, (value or "")[:max_len])
+    except Exception:
+        pass
+
+
+def _set_statut(doc, statut: str):
+    """Met à jour custom_status et workflow_state simultanément."""
+    _set_text(doc, FIELD_STATUT, statut)
+    try:
+        doc.workflow_state = statut
     except Exception:
         pass
 
@@ -326,15 +330,14 @@ def send_candidate_invite(doc, assessments: list) -> list:
         api_url = urljoin(base, path)
         token = settings.testlify_token
 
-        print("[INVITE] ▶️ Testlify API URL :", api_url)
-        print(f"[INVITE] ▶️ Candidate : {doc.custom_first_name} {doc.custom_last_name} <{getattr(doc, 'email_id', None)}>")
+        frappe.logger().info(f"[INVITE] URL : {api_url} | Candidat : {doc.custom_first_name} {doc.custom_last_name} <{getattr(doc, 'email_id', None)}>")
 
         headers = {
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
 
-        for assessment in assessments:
+        for assessment in (assessments or []):
             if isinstance(assessment, dict):
                 assessment_id = assessment.get('id')
                 assessment_name = assessment.get('assessment_name')
@@ -343,7 +346,7 @@ def send_candidate_invite(doc, assessments: list) -> list:
                 assessment_name = getattr(assessment, 'assessment_name', None)
 
             if not assessment_id:
-                print(f"[INVITE] ⚠️ Skip empty assessment id for {assessment!r}")
+                frappe.logger().warning(f"[INVITE] assessment_id vide, ignoré : {assessment!r}")
                 continue
 
             payload = {
@@ -370,13 +373,12 @@ def send_candidate_invite(doc, assessments: list) -> list:
                         "assessment_id": assessment_id,
                         "sent": 1
                     })
-                    _save_and_reload(doc)  # ← reload après save dans la boucle
                 results.append({"assessment_id": assessment_id, "status": "success"})
             else:
                 msg = body.get('error', {}).get('message') or response.text
                 results.append({"assessment_id": assessment_id, "status": status, "message": msg})
 
-        print("[INVITE] 🏁 Résultats finaux :", results)
+        frappe.logger().info(f"[INVITE] Résultats : {results}")
         if any_success:
             _set_flag(doc, FLAG_INVITES_SENT, 1)
         else:
@@ -384,9 +386,7 @@ def send_candidate_invite(doc, assessments: list) -> list:
         _save_and_reload(doc)  # ← reload après save final de la boucle
 
     except Exception as e:
-        print(f"[INVITE] 💥 ERREUR GLOBALE : {e}")
-        frappe.log_error(message=str(e), title="[INVITE] Fatal Error")
-        _safe_log_error("[INVITE] Fatal Error", e)
+        _safe_log_error("[INVITE] Erreur fatale", e)
         _set_text(doc, FIELD_AI_LAST_ERROR, f"Invite: {e}")
         _set_flag(doc, FLAG_INVITES_SENT, 0)
         _save_and_reload(doc)  # ← reload après save dans le handler d'erreur
@@ -401,13 +401,15 @@ def send_candidate_invite(doc, assessments: list) -> list:
 
 def process_job_applicant_matching(applicant_name):
     settings = frappe.get_single('Job Matching Integration Settings')
-    API_KEY = settings.gemini_api_key or "AIzaSyBJPXFY6QE5wiHNkazfHD1-AoJF2GJaF9g"
+    API_KEY = (settings.gemini_api_key or "").strip()
+    if not API_KEY:
+        frappe.throw("Clé API Gemini non configurée dans Job Matching Integration Settings.")
     client = genai.Client(api_key=API_KEY)
 
-    qualified_status = settings.status_qualified or "In qualification process"
-    status_not_qualified = settings.status_not_qualified or "Hold"
+    qualified_status = settings.status_qualified or "En Cours de qualification"
+    status_not_qualified = settings.status_not_qualified or "Top Profil"
     qualification_score_threshold = settings.qualification_score_threshold or 70
-    status_rejected = settings.status_rejected or "Rejected"
+    status_rejected = settings.status_rejected or "Rejecté"
     rejected_score = settings.rejected_max_score or 40
     gemini_error_status = settings.gemini_error_status or "Open"
 
@@ -439,7 +441,7 @@ def process_job_applicant_matching(applicant_name):
         except ValueError as bad_fmt:
             _set_flag(doc, FLAG_MATCHING_FAILED, 0)
             _set_text(doc, FIELD_AI_LAST_ERROR, str(bad_fmt))
-            doc.status = status_rejected or "Rejected"
+            _set_statut(doc, status_rejected or "Rejecté")
             doc.custom_justification = "Rejeté: format non supporté (PDF ou Word uniquement)."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
@@ -467,7 +469,7 @@ def process_job_applicant_matching(applicant_name):
         if not cv_check.get("is_cv", True):
             _set_flag(doc, FLAG_MATCHING_FAILED, 0)
             _set_text(doc, FIELD_AI_LAST_ERROR, "Document non CV")
-            doc.status = status_rejected or "Rejected"
+            _set_statut(doc, status_rejected or "Rejecté")
             doc.custom_justification = f"Rejeté: ce document n'est pas un CV ({cv_check.get('reason','')})."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
@@ -571,7 +573,7 @@ def process_job_applicant_matching(applicant_name):
             _set_flag(doc, FLAG_MATCHING_FAILED, 1)
             _set_text(doc, FIELD_AI_LAST_ERROR, str(e))
             _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
-            doc.status = gemini_error_status
+            _set_statut(doc, gemini_error_status)
             doc.custom_justification = "Analyse automatique momentanément indisponible. Traitement manuel."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
@@ -583,8 +585,7 @@ def process_job_applicant_matching(applicant_name):
         except Exception:
             candidate_json = json.loads(response1.text.strip("```json\n").strip("```").strip())
 
-        print("=== CV STRUCTURÉ ===")
-        print(json.dumps(candidate_json, indent=2, ensure_ascii=False))
+        frappe.logger().debug(f"[MATCHING] CV structuré : {json.dumps(candidate_json, ensure_ascii=False)}")
 
         # --- MISE À JOUR DU CANDIDAT ---
         info = candidate_json.get("candidate_info", {})
@@ -762,7 +763,7 @@ def process_job_applicant_matching(applicant_name):
             _set_flag(doc, FLAG_MATCHING_FAILED, 1)
             _set_text(doc, FIELD_AI_LAST_ERROR, str(e))
             _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
-            doc.status = gemini_error_status
+            _set_statut(doc, gemini_error_status)
             doc.custom_justification = "Matching indisponible (surcharge moteur). Reprise auto ou traitement manuel."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
@@ -774,6 +775,7 @@ def process_job_applicant_matching(applicant_name):
         except Exception:
             matching_score = json.loads(response2.text.strip("```json\n").strip("```").strip())
 
+        score = 0  # valeur par défaut si matching_score n'est pas un dict valide
         if isinstance(matching_score, dict):
             score = matching_score.get("score", 0)
             doc.custom_matching_score = score
@@ -783,22 +785,22 @@ def process_job_applicant_matching(applicant_name):
             doc.applicant_rating = float(f"{rating:.2f}")
 
             if score <= rejected_score:
-                doc.status = status_rejected
+                _set_statut(doc, status_rejected)
             else:
-                doc.status = qualified_status if score >= qualification_score_threshold else status_not_qualified
+                _set_statut(doc, qualified_status if score >= qualification_score_threshold else status_not_qualified)
 
             _save_and_reload(doc)  # ← reload après save du score de matching
 
-        if matching_score.get("score", 0) >= 70:
+        if score >= qualification_score_threshold:
             send_candidate_invite(doc, fiche.custom_assessments)
         else:
             send_candidate_not_matching_email(doc)
 
-        print("=== SCORE DE MATCHING ===")
-        print(json.dumps(matching_score, indent=2, ensure_ascii=False))
-        _set_flag(doc, FLAG_MATCHING_FAILED, 0)            
+        frappe.logger().info(
+            f"[MATCHING] Score : {score} | Statut : {doc.custom_status} | Candidat : {applicant_name}"
+        )
+        _set_flag(doc, FLAG_MATCHING_FAILED, 0)
         _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
-        doc.reload()  # ← resync timestamp avant le dernier save
 
 
 
@@ -806,14 +808,11 @@ def process_job_applicant_matching(applicant_name):
         _safe_log_error("[MATCHING] Erreur globale", e)
         _set_flag(doc, FLAG_MATCHING_FAILED, 1)
         _set_text(doc, FIELD_AI_LAST_ERROR, str(e))
-        raise
     finally:
-        # ▶️ Fin de cycle — on recharge avant le save final pour éviter le conflit
         _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
         try:
-            doc.reload()  # ← resync timestamp avant le dernier save
+            doc.reload()
         except Exception:
             pass
-        _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
         doc.save(ignore_permissions=True)
         frappe.db.commit()

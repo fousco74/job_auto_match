@@ -2,106 +2,43 @@
  {
   "docstatus": 0,
   "doctype": "Workflow Action Master",
-  "modified": "2026-02-27 11:30:50.148778",
-  "name": "auto",
-  "workflow_action_name": "auto"
+  "modified": "2026-03-30 18:34:14.210894",
+  "name": "Open",
+  "workflow_action_name": "Open"
  },
  {
   "docstatus": 0,
   "doctype": "Workflow Action Master",
-  "modified": "2026-02-27 11:32:27.891533",
-  "name": "Annuler",
-  "workflow_action_name": "Annuler"
+  "modified": "2026-03-30 18:34:14.214419",
+  "name": "Vivrier",
+  "workflow_action_name": "Vivrier"
  },
  {
   "docstatus": 0,
   "doctype": "Workflow Action Master",
-  "modified": "2025-08-18 22:38:14.971335",
-  "name": "Approve",
-  "workflow_action_name": "Approve"
+  "modified": "2026-03-30 18:34:14.217394",
+  "name": "Top Profil",
+  "workflow_action_name": "Top Profil"
  },
  {
   "docstatus": 0,
   "doctype": "Workflow Action Master",
-  "modified": "2025-08-18 22:38:14.972669",
-  "name": "Reject",
-  "workflow_action_name": "Reject"
+  "modified": "2026-03-30 18:34:14.220424",
+  "name": "Rejecté",
+  "workflow_action_name": "Rejecté"
  },
  {
   "docstatus": 0,
   "doctype": "Workflow Action Master",
-  "modified": "2025-08-18 22:38:14.974026",
-  "name": "Review",
-  "workflow_action_name": "Review"
+  "modified": "2026-03-30 18:34:14.223764",
+  "name": "En Cours de qualification",
+  "workflow_action_name": "En Cours de qualification"
  },
  {
   "docstatus": 0,
   "doctype": "Workflow Action Master",
-  "modified": "2025-09-16 10:25:06.852239",
-  "name": "change",
-  "workflow_action_name": "change"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2025-06-27 16:13:36.773584",
-  "name": "Initiate",
-  "workflow_action_name": "Initiate"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2025-06-27 16:28:02.106474",
-  "name": "Complete KYC",
-  "workflow_action_name": "Complete KYC"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2026-02-20 09:40:06.848521",
-  "name": "Run Basic Rules",
-  "workflow_action_name": "Run Basic Rules"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2026-02-20 09:40:06.861739",
-  "name": "Run Pre-Qualification Rules",
-  "workflow_action_name": "Run Pre-Qualification Rules"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2026-02-20 09:40:06.864394",
-  "name": "Run Knockout Rules",
-  "workflow_action_name": "Run Knockout Rules"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2026-02-20 09:40:06.867583",
-  "name": "Converted to Application",
-  "workflow_action_name": "Converted to Application"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2026-02-04 11:39:16.576191",
-  "name": "Rejeter",
-  "workflow_action_name": "Rejeter"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2026-02-04 11:38:37.053539",
-  "name": "Soumettre",
-  "workflow_action_name": "Soumettre"
- },
- {
-  "docstatus": 0,
-  "doctype": "Workflow Action Master",
-  "modified": "2026-02-04 11:38:52.543970",
-  "name": "Approuver",
-  "workflow_action_name": "Approuver"
+  "modified": "2026-03-30 18:34:14.226951",
+  "name": "Accepté",
+  "workflow_action_name": "Accepté"
  }
 ]

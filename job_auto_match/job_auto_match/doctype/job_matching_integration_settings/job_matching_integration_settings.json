@@ -5,20 +5,26 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "site_url",
-  "column_break_qxph",
+  "gemini_section",
   "gemini_api_key",
+  "site_url",
   "testlify_configuration_section",
   "testlify_base_url",
-  "testlify_candidate_invite",
-  "testlify_token",
   "column_break_mxxq",
-  "status_qualified",
+  "testlify_token",
+  "testlify_candidate_invite",
+  "testlify_webhook_token",
+  "webhook_service_user",
+  "scoring_section",
   "qualification_score_threshold",
+  "score_test",
   "rejected_max_score",
-  "status_not_qualified",
-  "status_rejected",
+  "column_break_qxph",
   "gemini_error_status",
+  "status_qualified",
+  "status_not_qualified",
+  "status_after_test",
+  "status_rejected",
   "section_break_ngmo",
   "candidate_not_matching_subject",
   "candidate_not_matching_email_header",
@@ -32,134 +38,174 @@
  ],
  "fields": [
   {
-   "fieldname": "site_url",
-   "fieldtype": "Data",
-   "label": "Site Url"
+   "fieldname": "gemini_section",
+   "fieldtype": "Section Break",
+   "label": "Configuration Gemini IA"
   },
   {
    "fieldname": "gemini_api_key",
+   "fieldtype": "Password",
+   "label": "Clé API Gemini",
+   "reqd": 1
+  },
+  {
+   "fieldname": "site_url",
    "fieldtype": "Data",
-   "label": "Gemini Api Key"
-  },
-  {
-   "fieldname": "testlify_base_url",
-   "fieldtype": "Data",
-   "label": "Testlify Base Url"
-  },
-  {
-   "fieldname": "testlify_token",
-   "fieldtype": "Data",
-   "label": "Testlify Token"
-  },
-  {
-   "fieldname": "testlify_candidate_invite",
-   "fieldtype": "Data",
-   "label": "Testlify Candidate Invite"
-  },
-  {
-   "fieldname": "status_qualified",
-   "fieldtype": "Select",
-   "label": "Status qualified",
-   "options": "Open\nReplied\nRejected\nHold\nAccepted\nIn qualification process"
-  },
-  {
-   "fieldname": "status_not_qualified",
-   "fieldtype": "Select",
-   "label": "status not qualified",
-   "options": "Open\nReplied\nRejected\nHold\nAccepted\nIn qualification process"
-  },
-  {
-   "fieldname": "qualification_score_threshold",
-   "fieldtype": "Int",
-   "label": "qualification score threshold",
-   "non_negative": 1
-  },
-  {
-   "fieldname": "candidate_not_matching_subject",
-   "fieldtype": "Data",
-   "label": "candidate not matching subject"
-  },
-  {
-   "fieldname": "candidate_not_matching_email_header",
-   "fieldtype": "Data",
-   "label": "candidate not matching email header"
-  },
-  {
-   "fieldname": "section_break_ngmo",
-   "fieldtype": "Section Break",
-   "label": "Not matching email configuration"
-  },
-  {
-   "description": "{{ applicant_name }}, {{ job_title }}, {{ score }}, {{ justification }}",
-   "fieldname": "candidate_not_matching_email_template",
-   "fieldtype": "Small Text",
-   "label": "candidate not matching email template\t"
-  },
-  {
-   "fieldname": "column_break_pymk",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_qxph",
-   "fieldtype": "Column Break"
+   "label": "URL du site (pour les liens fichiers)"
   },
   {
    "fieldname": "testlify_configuration_section",
    "fieldtype": "Section Break",
-   "label": "Testlify Configuration"
+   "label": "Configuration Testlify"
+  },
+  {
+   "fieldname": "testlify_base_url",
+   "fieldtype": "Data",
+   "label": "URL de base Testlify"
   },
   {
    "fieldname": "column_break_mxxq",
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "testlify_token",
+   "fieldtype": "Password",
+   "label": "Token API Testlify"
+  },
+  {
+   "fieldname": "testlify_candidate_invite",
+   "fieldtype": "Data",
+   "label": "Endpoint invitation candidat"
+  },
+  {
+   "fieldname": "testlify_webhook_token",
+   "fieldtype": "Password",
+   "label": "Token webhook Testlify (X-Webhook-Token)"
+  },
+  {
+   "default": "Administrator",
+   "fieldname": "webhook_service_user",
+   "fieldtype": "Link",
+   "label": "Utilisateur de service webhook",
+   "options": "User"
+  },
+  {
+   "fieldname": "scoring_section",
+   "fieldtype": "Section Break",
+   "label": "Seuils et statuts"
+  },
+  {
+   "default": "70",
+   "fieldname": "qualification_score_threshold",
+   "fieldtype": "Int",
+   "label": "Seuil qualification IA (%)",
+   "non_negative": 1
+  },
+  {
+   "default": "40",
+   "fieldname": "score_test",
+   "fieldtype": "Int",
+   "label": "Seuil réussite test Testlify (%)",
+   "non_negative": 1
+  },
+  {
+   "default": "40",
+   "fieldname": "rejected_max_score",
+   "fieldtype": "Int",
+   "label": "Score max avant rejet direct (%)",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_qxph",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Open",
+   "fieldname": "gemini_error_status",
+   "fieldtype": "Select",
+   "label": "Statut en cas d'erreur Gemini",
+   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+  },
+  {
+   "fieldname": "status_qualified",
+   "fieldtype": "Select",
+   "label": "Statut si qualifié (score ≥ seuil)",
+   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+  },
+  {
+   "fieldname": "status_not_qualified",
+   "fieldtype": "Select",
+   "label": "Statut si non qualifié (score < seuil)",
+   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+  },
+  {
+   "fieldname": "status_after_test",
+   "fieldtype": "Select",
+   "label": "Statut après réussite du test",
+   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+  },
+  {
+   "fieldname": "status_rejected",
+   "fieldtype": "Select",
+   "label": "Statut rejeté",
+   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+  },
+  {
+   "fieldname": "section_break_ngmo",
+   "fieldtype": "Section Break",
+   "label": "Email — Candidat non retenu (après IA)"
+  },
+  {
+   "fieldname": "candidate_not_matching_subject",
+   "fieldtype": "Data",
+   "label": "Objet"
+  },
+  {
+   "fieldname": "candidate_not_matching_email_header",
+   "fieldtype": "Data",
+   "label": "En-tête"
+  },
+  {
+   "fieldname": "column_break_pymk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Variables disponibles : {{ applicant_name }}, {{ job_title }}, {{ score }}, {{ justification }}",
+   "fieldname": "candidate_not_matching_email_template",
+   "fieldtype": "Small Text",
+   "label": "Template HTML (Jinja2)"
+  },
+  {
    "fieldname": "rejected_email_configuration_section",
    "fieldtype": "Section Break",
-   "label": "Rejected Email Configuration "
+   "label": "Email — Candidat rejeté (après test Testlify)"
   },
   {
    "fieldname": "candidate_rejected_after_test_subject",
    "fieldtype": "Data",
-   "label": "candidate rejected after test subject"
+   "label": "Objet"
+  },
+  {
+   "fieldname": "candidate_rejected_after_test_header",
+   "fieldtype": "Data",
+   "label": "En-tête"
   },
   {
    "fieldname": "column_break_bcqc",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "candidate_rejected_after_test_header",
-   "fieldtype": "Data",
-   "label": "candidate rejected after test header"
-  },
-  {
+   "description": "Variables disponibles : {{ applicant_name }}, {{ job_title }}, {{ score }}",
    "fieldname": "candidate_rejected_after_test_template",
    "fieldtype": "Small Text",
-   "label": "candidate rejected after test template"
-  },
-  {
-   "default": "Rejected",
-   "fieldname": "status_rejected",
-   "fieldtype": "Select",
-   "label": "status rejected",
-   "options": "Open\nReplied\nRejected\nHold\nAccepted\nIn qualification process"
-  },
-  {
-   "fieldname": "rejected_max_score",
-   "fieldtype": "Int",
-   "label": "rejected max score"
-  },
-  {
-   "default": "Open",
-   "fieldname": "gemini_error_status",
-   "fieldtype": "Data",
-   "label": "gemini error status"
+   "label": "Template HTML (Jinja2)"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-10-03 15:35:08.963500",
+ "modified": "2026-03-27 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "job_auto_match",
  "name": "Job Matching Integration Settings",
