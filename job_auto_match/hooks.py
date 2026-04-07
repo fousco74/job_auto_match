@@ -15,7 +15,11 @@ doctype_js = {"Job Applicant": "public/js/job_applicant.js"}
 doc_events = {
     "Job Applicant": {
         "before_insert": "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.validate_unique_application",
-        "after_insert":  "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.enqueue_matching",
+        "after_insert":  [
+            "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.enqueue_matching",
+            "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.ensure_resume_file_linked",
+        ],
+        "on_update":     "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.ensure_resume_file_linked",
         "validate":      "job_auto_match.job_auto_match.doctype.job_applicant.job_applicant.sync_workflow_state",
     }
 }
@@ -32,6 +36,11 @@ _WORKFLOW_STATES = [
 ]
 
 fixtures = [
+    # Permissions personnalisées sur Job Applicant
+    {
+        "doctype": "Custom DocPerm",
+        "filters": [["parent", "=", "Job Applicant"]],
+    },
     # Champs personnalisés sur Job Opening et Job Applicant
     {
         "doctype": "Custom Field",

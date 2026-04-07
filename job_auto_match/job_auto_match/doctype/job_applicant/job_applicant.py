@@ -120,6 +120,38 @@ def _validate_no_duplicate(doc):
         )
 
 
+# ── Liaison fichier CV ────────────────────────────────────────────────────────
+def ensure_resume_file_linked(doc, method=None):
+    """
+    Garantit que le fichier CV (resume_attachment) est bien rattaché à ce Job
+    Applicant dans le document File.  Appelé sur after_insert et on_update pour
+    couvrir les uploads manuels (Administrator) et via web form (Guest).
+    """
+    resume_url = (getattr(doc, "resume_attachment", "") or "").strip()
+    if not resume_url:
+        return
+
+    orphan_files = frappe.db.get_all(
+        "File",
+        filters={
+            "file_url": resume_url,
+            "attached_to_doctype": ("is", "not set"),
+        },
+        fields=["name"],
+    )
+    for file_record in orphan_files:
+        frappe.db.set_value(
+            "File",
+            file_record.name,
+            {
+                "attached_to_doctype": "Job Applicant",
+                "attached_to_name": doc.name,
+                "attached_to_field": "resume_attachment",
+            },
+            update_modified=False,
+        )
+
+
 # ── Synchronisation custom_status ↔ workflow_state ──────────────────────────
 def sync_workflow_state(doc, method=None):
     """Maintient workflow_state aligné sur custom_status à chaque sauvegarde."""
