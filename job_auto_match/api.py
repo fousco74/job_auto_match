@@ -1,7 +1,6 @@
 import frappe
-from frappe import enqueue
 from contextlib import contextmanager
-from jinja2 import TemplateNotFound
+from jinja2.exceptions import TemplateNotFound
 
 from job_auto_match.job_auto_match.utils.matching import (
     send_candidate_not_matching_email,
@@ -38,8 +37,15 @@ def _to_float(x, default=0.0):
 
 
 def _is_test_ping(payload: dict) -> bool:
-    """Payload envoyé par Testlify pour valider l'URL — sans event ni type."""
     return not payload.get("type") and not payload.get("event")
+
+
+def _get_password_safely(doc, fieldname: str) -> str:
+    """Récupère un password sans lever d'exception"""
+    try:
+        return (doc.get_password(fieldname, raise_exception=False) or "").strip()
+    except Exception:
+        return ""
 
 
 @contextmanager
@@ -57,71 +63,78 @@ def _as_user(user: str):
 def completed():
     """Reçoit le webhook 'candidate completed' de Testlify."""
     try:
-        payload = frappe.request.get_json() or {}
-        settings = frappe.get_single("Job Matching Integration Settings")
+        payload = frappe.request.get_json(silent=True) or {}
+        settings = frappe.get_cached_doc("Job Matching Integration Settings")
+
+        frappe.logger().info(f"[TESTLIFY] Webhook appelé - Payload keys: {list(payload.keys())}")
 
         # 1) Ping de validation Testlify
         if _is_test_ping(payload):
+            frappe.logger().info("[TESTLIFY] Ping de validation détecté")
             return {"status": 200, "reason": "webhook ok"}
 
         data = payload.get("data") or {}
 
         # 2) Authentification webhook
-        expected = (settings.testlify_webhook_token or "").strip()
+        expected = _get_password_safely(settings, "testlify_webhook_token")
         received = (frappe.get_request_header("X-Webhook-Token") or "").strip()
+
+        frappe.logger().info(f"[TESTLIFY] Token reçu = '{received}' | Token attendu (début) = '{expected[:15]}...'")
+
         if expected and received != expected:
+            frappe.logger().error("[TESTLIFY] Token invalide")
             frappe.local.response["http_status_code"] = 401
             return {"status": 401, "reason": "Token invalide."}
 
         # 3) Champs obligatoires
-        assessment_id   = data.get("assessmentId")
-        candidate_data  = data.get("candidate") or {}
-        email           = (candidate_data.get("email") or "").strip().lower()
+        assessment_id = data.get("assessmentId")
+        candidate_data = data.get("candidate") or {}
+        email = (candidate_data.get("email") or "").strip().lower()
 
         if not assessment_id:
             frappe.local.response["http_status_code"] = 400
             return {"status": 400, "reason": "`assessmentId` manquant."}
+
         if not email:
             frappe.local.response["http_status_code"] = 400
             return {"status": 400, "reason": "`data.candidate.email` manquant."}
 
-        # 4) Lookup candidat via Assessment Score (clé naturelle unique)
+        # 4) Recherche du candidat
         applicant_name = frappe.db.get_value(
             "Assessment Score", {"assessment_id": assessment_id}, "parent"
         )
         if not applicant_name:
             frappe.local.response["http_status_code"] = 404
-            return {
-                "status": 404,
-                "reason": f"Aucun candidat pour assessment_id '{assessment_id}'.",
-            }
+            return {"status": 404, "reason": f"Aucun candidat pour assessment_id '{assessment_id}'."}
 
-        # 5) Chargement + mise à jour de la ligne d'évaluation
+        # 5) Chargement du Job Applicant
         candidate = frappe.get_doc("Job Applicant", applicant_name)
         candidate.flags.ignore_permissions = True
 
-        scores_data    = data.get("scores") or {}
+        scores_data = data.get("scores") or {}
         incoming_score = _to_float(scores_data.get("avgScorePercentage", 0))
-        row_found      = False
 
-        for row in candidate.custom_assessments or []:
-            if row.assessment_id == assessment_id:
-                row.completed       = True
+        # Mise à jour des assessments
+        row_found = False
+        for row in candidate.get("custom_assessments") or []:
+            if getattr(row, "assessment_id", None) == assessment_id:
+                row.completed = True
                 row.assessment_score = incoming_score
                 row_found = True
+                break
 
         if not row_found:
             candidate.append("custom_assessments", {
-                "assessment_id":   assessment_id,
-                "completed":       True,
+                "assessment_id": assessment_id,
+                "completed": True,
                 "assessment_score": incoming_score,
             })
 
-        # 6) Score global (uniquement si toutes les évaluations sont complètes)
-        all_rows        = candidate.custom_assessments or []
-        item_count      = len(all_rows)
+        # 6) Calcul score global
+        all_rows = candidate.get("custom_assessments") or []
+        item_count = len(all_rows)
         completed_count = sum(1 for r in all_rows if getattr(r, "completed", False))
-        total_score     = sum(_to_float(getattr(r, "assessment_score", 0)) for r in all_rows)
+        total_score = sum(_to_float(getattr(r, "assessment_score", 0)) for r in all_rows)
 
         frappe.logger().info(
             f"[TESTLIFY] {applicant_name} — {completed_count}/{item_count} évaluations complètes"
@@ -131,16 +144,16 @@ def completed():
             global_score = round(total_score / item_count, 2)
             rating = max(0.0, min(1.0, global_score / 100.0))
 
-            candidate.applicant_rating      = float(f"{rating:.2f}")
+            candidate.applicant_rating = float(f"{rating:.2f}")
             candidate.custom_testlify_score = global_score
-            _set_statut(candidate,
-                settings.status_after_test
-                if global_score >= (settings.score_test or 0)
-                else settings.status_rejected
-            )
 
-            # Envoi email rejet si score insuffisant
-            if candidate.custom_status == settings.status_rejected:
+            # Mise à jour du statut
+            threshold = getattr(settings, "score_test", 0) or 0
+            new_status = getattr(settings, "status_after_test", None) if global_score >= threshold else getattr(settings, "status_rejected", None)
+            _set_statut(candidate, new_status)
+
+            # Envoi email de rejet
+            if getattr(candidate, "custom_status", None) == getattr(settings, "status_rejected", None):
                 recipient = (getattr(candidate, "email_id", "") or "").strip()
                 if not recipient:
                     frappe.local.response["http_status_code"] = 404
@@ -148,61 +161,79 @@ def completed():
 
                 ctx = {
                     "applicant_name": getattr(candidate, "applicant_name", ""),
-                    "job_title":      getattr(candidate, "custom_nom_de_loffre", "")
-                                      or getattr(candidate, "job_title", ""),
-                    "score":          global_score,
+                    "job_title": getattr(candidate, "custom_nom_de_loffre", "") or getattr(candidate, "job_title", ""),
+                    "score": global_score,
                 }
-                subject_tpl = (settings.candidate_rejected_after_test_subject
-                               or "Résultat de votre évaluation")
+
+                subject_tpl = getattr(settings, "candidate_rejected_after_test_subject", "") or "Résultat de votre évaluation"
+
                 try:
                     subject = frappe.render_template(subject_tpl, ctx)
                 except Exception:
                     subject = subject_tpl
 
-                html_src = (settings.candidate_rejected_after_test_template or "").strip()
+                html_src = (getattr(settings, "candidate_rejected_after_test_template", "") or "").strip()
+
                 try:
                     if html_src:
                         message_html = frappe.render_template(html_src, ctx)
                     else:
                         try:
                             message_html = frappe.get_template(TEMPLATE_REJECTED).render(ctx)
-                        except TemplateNotFound:
+                        except (TemplateNotFound, Exception):
                             message_html = frappe.render_template(DEFAULT_REJECTED_HTML, ctx)
 
                     frappe.sendmail(
-                        recipients=[recipient], subject=subject, message=message_html
+                        recipients=[recipient],
+                        subject=subject,
+                        message=message_html,
+                        delayed=False
                     )
                     _set_flag(candidate, FLAG_REJECTED_AFTER_TEST_EMAIL_SENT, 1)
-
                 except Exception as e:
-                    frappe.log_error(
-                        f"{frappe.get_traceback()}\n{repr(e)}",
-                        "[TESTLIFY] Envoi email rejet échoué"[:140],
-                    )
-                    _set_text(candidate, FIELD_AI_LAST_ERROR, f"Email rejet: {e}")
+                    frappe.log_error(title="[TESTLIFY] Envoi email rejet échoué", message=frappe.get_traceback())
+                    _set_text(candidate, FIELD_AI_LAST_ERROR, f"Email rejet: {str(e)}")
                     _set_flag(candidate, FLAG_REJECTED_AFTER_TEST_EMAIL_SENT, 0)
 
-        # 7) Sauvegarde sous l'utilisateur de service
-        service_user = (settings.webhook_service_user or "Administrator").strip()
+        # 7) Sauvegarde sous un utilisateur de service (sécurisé)
+        # On utilise le champ webhook_service_user s'il existe, sinon on prend "Administrator" en dernier recours
+        service_user = "Administrator"  # Valeur par défaut minimale
+
+        if hasattr(settings, "webhook_service_user"):
+            configured_user = (getattr(settings, "webhook_service_user", "") or "").strip()
+            if configured_user and frappe.db.exists("User", configured_user):
+                service_user = configured_user
+            else:
+                frappe.logger().warning(f"[TESTLIFY] Utilisateur configuré '{configured_user}' inexistant → fallback sur Administrator")
+        else:
+            frappe.logger().warning("[TESTLIFY] Champ 'webhook_service_user' absent du doctype → utilisation d'Administrator")
+
+        frappe.logger().info(f"[TESTLIFY] Sauvegarde effectuée en tant que : {service_user}")
+
         with _as_user(service_user):
             candidate.save(ignore_permissions=True)
+
         frappe.db.commit()
 
-        return {"status": 200, "data": {"applicant": candidate.name, "updated": True}}
+        return {
+            "status": 200,
+            "data": {
+                "applicant": candidate.name,
+                "global_score": getattr(candidate, "custom_testlify_score", None),
+                "updated": True
+            }
+        }
 
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "[TESTLIFY] Erreur webhook")
+        frappe.log_error(frappe.get_traceback(), "[TESTLIFY] Erreur générale webhook")
         frappe.local.response["http_status_code"] = 500
         return {"status": 500, "reason": str(e)}
 
 
-# ── Actions manuelles (appelées depuis le formulaire Job Applicant) ───────────
+# ── Actions manuelles ────────────────────────────────────────────────────────
 @frappe.whitelist()
 def retry_matching(applicant_name: str):
-    """Relance le matching IA pour un candidat."""
-    from job_auto_match.job_auto_match.doctype.job_applicant.job_applicant import (
-        _enqueue_matching,
-    )
+    from job_auto_match.job_auto_match.doctype.job_applicant.job_applicant import _enqueue_matching
     doc = frappe.get_doc("Job Applicant", applicant_name)
     _set_text(doc, FIELD_AI_LAST_ERROR, "")
     _set_flag(doc, FLAG_MATCHING_FAILED, 0)
@@ -215,7 +246,6 @@ def retry_matching(applicant_name: str):
 
 @frappe.whitelist()
 def resend_not_match_email(applicant_name: str):
-    """Renvoie l'email 'non retenu' au candidat."""
     doc = frappe.get_doc("Job Applicant", applicant_name)
     send_candidate_not_matching_email(doc)
     return {"ok": True, "message": "E-mail 'non retenu' renvoyé."}
@@ -223,8 +253,17 @@ def resend_not_match_email(applicant_name: str):
 
 @frappe.whitelist()
 def resend_invites(applicant_name: str):
-    """Renvoie les invitations Testlify au candidat."""
-    doc   = frappe.get_doc("Job Applicant", applicant_name)
-    fiche = frappe.get_doc("Job Opening", doc.job_title or "")
-    res   = send_candidate_invite(doc, fiche.custom_assessments)
+    doc = frappe.get_doc("Job Applicant", applicant_name)
+    job_title = (getattr(doc, "job_title", "") or "").strip()
+
+    if not job_title:
+        frappe.throw("Aucune offre d'emploi associée à ce candidat.", title="Offre manquante")
+
+    try:
+        fiche = frappe.get_doc("Job Opening", job_title)
+    except frappe.DoesNotExistError:
+        frappe.throw(f"L'offre d'emploi '{job_title}' est introuvable.", title="Offre introuvable")
+
+    assessments = getattr(fiche, "custom_assessments", None) or []
+    res = send_candidate_invite(doc, assessments)
     return {"ok": True, "result": res}
