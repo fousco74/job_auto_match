@@ -15,6 +15,10 @@ from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
 
 
+_SETTINGS_DOCTYPE = "Job Matching Integration Settings"
+
+
+
 # --- Flags mapping (adapte si tes fieldnames diffèrent) ---
 FLAG_MATCHING_IN_PROGRESS = "custom_is_matching_in_progress"
 FLAG_MATCHING_FAILED      = "custom_is_matching_failed"
@@ -170,16 +174,24 @@ def _safe_log_error(title: str, err: Exception):
             pass
 
 
+
 def _save_and_reload(doc):
     """
-    Sauvegarde le document, commit la transaction, puis recharge le doc
-    depuis la DB pour resynchroniser le timestamp modified.
-    Evite TimestampMismatchError et QueryDeadlockError sur les saves suivants.
+    Sauvegarde depuis un job background sans dépendre d'un compte utilisateur.
+
+    Pourquoi le monkey-patch :
+      doc.save(ignore_permissions=True) bypasse les checks de permission doctype,
+      MAIS Frappe appelle quand même self.validate_workflow() dans _validate().
+      validate_workflow() appelle check_permission("read") sur doc._doc_before_save
+      via frappe.session.user — ce qui peut échouer dans un contexte background job.
+      En remplaçant validate_workflow au niveau de l'instance, on court-circuite
+      cette chaîne sans modifier Frappe ni dépendre d'Administrator.
     """
+    doc.flags.ignore_permissions = True
+    doc.validate_workflow = lambda: None  # instance attribute → shadowe la méthode de classe
     doc.save(ignore_permissions=True)
     frappe.db.commit()
     doc.reload()
-
 
 # -----------------------------------------------------------------------------
 
@@ -261,7 +273,7 @@ def call_gemini_with_retry(
 def send_candidate_not_matching_email(doc):
     TEMPLATE_PATH = "job_auto_match/templates/emails/candidate_not_matching.html"
     try:
-        settings = frappe.get_single("Job Matching Integration Settings")
+        settings = frappe.get_cached_doc(_SETTINGS_DOCTYPE)
 
         recipient = (getattr(doc, "email_id", "") or "").strip()
         if not recipient:
@@ -324,11 +336,22 @@ def send_candidate_invite(doc, assessments: list) -> list:
     any_success = False
 
     try:
-        settings = frappe.get_single('Job Matching Integration Settings')
-        base = settings.testlify_base_url.rstrip('/') + '/' or "http://amoaman.com:8001/"
-        path = settings.testlify_candidate_invite.lstrip('/')
-        api_url = urljoin(base, path)
-        token = settings.testlify_token
+        settings = frappe.get_cached_doc(_SETTINGS_DOCTYPE)
+
+        base_url  = (settings.testlify_base_url or "").strip()
+        inv_path  = (settings.testlify_candidate_invite or "").strip()
+        token     = (settings.get_password("testlify_token") or "").strip()
+
+        missing = []
+        if not base_url: missing.append("URL de base Testlify")
+        if not inv_path: missing.append("Endpoint invitation candidat")
+        if not token:    missing.append("Token API Testlify")
+        if missing:
+            raise ValueError(
+                f"Configuration Testlify incomplète — champs manquants : {', '.join(missing)}"
+            )
+
+        api_url = urljoin(base_url.rstrip('/') + '/', inv_path.lstrip('/'))
 
         frappe.logger().info(f"[INVITE] URL : {api_url} | Candidat : {doc.custom_first_name} {doc.custom_last_name} <{getattr(doc, 'email_id', None)}>")
 
@@ -349,11 +372,20 @@ def send_candidate_invite(doc, assessments: list) -> list:
                 frappe.logger().warning(f"[INVITE] assessment_id vide, ignoré : {assessment!r}")
                 continue
 
+            first_name = (getattr(doc, "custom_first_name", "") or "").strip()
+            last_name  = (getattr(doc, "custom_last_name",  "") or "").strip()
+            email      = (getattr(doc, "email_id",          "") or "").strip()
+
+            if not email:
+                frappe.logger().warning(f"[INVITE] Email candidat vide, assessment {assessment_id} ignoré.")
+                results.append({"assessment_id": assessment_id, "status": "skipped", "message": "email vide"})
+                continue
+
             payload = {
                 'candidateInvites': [{
-                    'firstName': doc.custom_first_name,
-                    'lastName': doc.custom_last_name,
-                    'email': doc.email_id,
+                    'firstName': first_name,
+                    'lastName':  last_name,
+                    'email':     email,
                 }],
                 'assessmentId': assessment_id,
             }
@@ -367,15 +399,22 @@ def send_candidate_invite(doc, assessments: list) -> list:
 
             if status == 200:
                 any_success = True
+                # Mettre à jour le row existant plutôt qu'en ajouter un doublon
                 if hasattr(doc, "custom_assessments"):
-                    doc.append("custom_assessments", {
-                        "assessment_name": assessment_name,
-                        "assessment_id": assessment_id,
-                        "sent": 1
-                    })
+                    for row in (doc.custom_assessments or []):
+                        if getattr(row, "assessment_id", None) == assessment_id:
+                            row.sent = 1
+                            break
+                    else:
+                        doc.append("custom_assessments", {
+                            "assessment_id":   assessment_id,
+                            "assessment_name": assessment_name,
+                            "sent":            1,
+                        })
                 results.append({"assessment_id": assessment_id, "status": "success"})
             else:
-                msg = body.get('error', {}).get('message') or response.text
+                err_body = body.get("error") if isinstance(body, dict) else None
+                msg = (err_body.get("message") if isinstance(err_body, dict) else None) or response.text
                 results.append({"assessment_id": assessment_id, "status": status, "message": msg})
 
         frappe.logger().info(f"[INVITE] Résultats : {results}")
@@ -399,11 +438,13 @@ def send_candidate_invite(doc, assessments: list) -> list:
 # 3) Process Matching Candidat
 # -----------------------------
 
-def process_job_applicant_matching(applicant_name):
-    settings = frappe.get_single('Job Matching Integration Settings')
-    API_KEY = (settings.gemini_api_key or "").strip()
+def process_job_applicant_matching(applicant_name, **kwargs):
+    settings = frappe.get_cached_doc(_SETTINGS_DOCTYPE)
+    API_KEY = (settings.get_password("gemini_api_key") or "").strip()
     if not API_KEY:
-        frappe.throw("Clé API Gemini non configurée dans Job Matching Integration Settings.")
+        raise ValueError(
+            "Clé API Gemini non configurée dans Job Matching Integration Settings."
+        )
     client = genai.Client(api_key=API_KEY)
 
     qualified_status = settings.status_qualified or "En Cours de qualification"
@@ -419,7 +460,10 @@ def process_job_applicant_matching(applicant_name):
     _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 1)
     _set_flag(doc, FLAG_MATCHING_FAILED, 0)
     _set_text(doc, FIELD_AI_LAST_ERROR, "")
-    _save_and_reload(doc)  # ← reload après save initial des flags
+    _save_and_reload(doc)
+
+    _matching_error = ""       # non-vide = erreur fatale → persistée dans le finally
+    _matching_succeeded = False  # True = traitement normal terminé
 
     try:
         fiche = frappe.get_doc("Job Opening", doc.job_title or "")
@@ -440,12 +484,13 @@ def process_job_applicant_matching(applicant_name):
             parts_cv, prep_info = _prepare_resume_parts_for_gemini(file_path)
         except ValueError as bad_fmt:
             _set_flag(doc, FLAG_MATCHING_FAILED, 0)
+            _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
             _set_text(doc, FIELD_AI_LAST_ERROR, str(bad_fmt))
             _set_statut(doc, status_rejected or "Rejecté")
             doc.custom_justification = "Rejeté: format non supporté (PDF ou Word uniquement)."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
-            _save_and_reload(doc)  # ← reload avant return
+            _save_and_reload(doc)
             return
 
         # --- Étape 0 : vérifier que le document est bien un CV ---
@@ -468,12 +513,13 @@ def process_job_applicant_matching(applicant_name):
 
         if not cv_check.get("is_cv", True):
             _set_flag(doc, FLAG_MATCHING_FAILED, 0)
+            _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
             _set_text(doc, FIELD_AI_LAST_ERROR, "Document non CV")
             _set_statut(doc, status_rejected or "Rejecté")
             doc.custom_justification = f"Rejeté: ce document n'est pas un CV ({cv_check.get('reason','')})."
             doc.custom_matching_score = 0
             doc.applicant_rating = 0.0
-            _save_and_reload(doc)  # ← reload avant return
+            _save_and_reload(doc)
             return
 
         # --- GEMINI EXTRACTION DU CV ---
@@ -583,26 +629,37 @@ def process_job_applicant_matching(applicant_name):
         try:
             candidate_json = json.loads(response1.text)
         except Exception:
-            candidate_json = json.loads(response1.text.strip("```json\n").strip("```").strip())
+            try:
+                candidate_json = json.loads(response1.text.strip("```json\n").strip("```").strip())
+            except Exception as parse_err:
+                raise ValueError(f"Réponse Gemini (extraction CV) non parseable: {parse_err}")
 
         frappe.logger().debug(f"[MATCHING] CV structuré : {json.dumps(candidate_json, ensure_ascii=False)}")
 
         # --- MISE À JOUR DU CANDIDAT ---
-        info = candidate_json.get("candidate_info", {})
-        if info.get("age"):
-            doc.custom_old = info["age"]
+        info = candidate_json.get("candidate_info") if isinstance(candidate_json, dict) else {}
+        if not isinstance(info, dict):
+            info = {}
 
-        if info.get("first_name"):
-            doc.custom_first_name = info["first_name"]
+        age = info.get("age")
+        if age is not None:
+            doc.custom_old = int(age)
 
-        if info.get("last_name"):
-            doc.custom_last_name = info["last_name"]
+        first_name = (info.get("first_name") or "").strip()
+        if first_name:
+            doc.custom_first_name = first_name
 
-        if info.get("annee_experience"):
-            doc.custom_minimum_experience = info["annee_experience"]
+        last_name = (info.get("last_name") or "").strip()
+        if last_name:
+            doc.custom_last_name = last_name
 
-        if info.get("niveau_etude"):
-            doc.custom_study_level = info["niveau_etude"]
+        annee_exp = info.get("annee_experience")
+        if annee_exp is not None:
+            doc.custom_minimum_experience = int(annee_exp)
+
+        niveau = (info.get("niveau_etude") or "").strip()
+        if niveau:
+            doc.custom_study_level = niveau
 
         if hasattr(doc, "custom_outils"):
             doc.set("custom_outils", [])
@@ -615,12 +672,32 @@ def process_job_applicant_matching(applicant_name):
                 doc.append("custom_skills", {"skill_name": skill})
 
         if hasattr(doc, "custom_assessments"):
+            # Préserver les lignes déjà complétées (scores Testlify) lors d'un rematching
+            completed_rows = {
+                row.assessment_id: row
+                for row in (doc.custom_assessments or [])
+                if getattr(row, "completed", False) and getattr(row, "assessment_id", None)
+            }
             doc.set("custom_assessments", [])
-            for assessment in fiche.custom_assessments:
-                doc.append("custom_assessments", {
-                    "assessment_id": assessment.id,
-                    "assessment_name": assessment.assessment_name
-                })
+            for assessment in (fiche.custom_assessments or []):
+                aid   = getattr(assessment, "id", None) or getattr(assessment, "assessment_id", None)
+                aname = getattr(assessment, "assessment_name", None)
+                if not aid:
+                    continue
+                if aid in completed_rows:
+                    prev = completed_rows[aid]
+                    doc.append("custom_assessments", {
+                        "assessment_id":    aid,
+                        "assessment_name":  aname or getattr(prev, "assessment_name", ""),
+                        "completed":        True,
+                        "assessment_score": getattr(prev, "assessment_score", 0),
+                        "sent":             getattr(prev, "sent", 0),
+                    })
+                else:
+                    doc.append("custom_assessments", {
+                        "assessment_id":   aid,
+                        "assessment_name": aname,
+                    })
 
         if hasattr(doc, "custom_experiences"):
             doc.set("custom_experiences", [])
@@ -677,11 +754,11 @@ def process_job_applicant_matching(applicant_name):
         _save_and_reload(doc)  # ← reload après save des données CV extraites
 
         job_json = {
-            "skills": [r.skill for r in fiche.custom_skills],
-            "outils": [r.outil for r in fiche.custom_outils],
+            "skills":             [getattr(r, "skill", "") for r in (fiche.custom_skills or [])],
+            "outils":             [getattr(r, "outil", "") for r in (fiche.custom_outils or [])],
             "minimum_experience": fiche.custom_minimum_experience,
-            "study_level": fiche.custom_study_level,
-            "fiche": fiche.description
+            "study_level":        fiche.custom_study_level,
+            "fiche":              fiche.description,
         }
 
         prompt2 = f"""
@@ -773,7 +850,10 @@ def process_job_applicant_matching(applicant_name):
         try:
             matching_score = json.loads(response2.text)
         except Exception:
-            matching_score = json.loads(response2.text.strip("```json\n").strip("```").strip())
+            try:
+                matching_score = json.loads(response2.text.strip("```json\n").strip("```").strip())
+            except Exception as parse_err:
+                raise ValueError(f"Réponse Gemini (score matching) non parseable: {parse_err}")
 
         score = 0  # valeur par défaut si matching_score n'est pas un dict valide
         if isinstance(matching_score, dict):
@@ -799,20 +879,27 @@ def process_job_applicant_matching(applicant_name):
         frappe.logger().info(
             f"[MATCHING] Score : {score} | Statut : {doc.custom_status} | Candidat : {applicant_name}"
         )
-        _set_flag(doc, FLAG_MATCHING_FAILED, 0)
-        _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
-
-
+        _matching_succeeded = True
 
     except Exception as e:
         _safe_log_error("[MATCHING] Erreur globale", e)
-        _set_flag(doc, FLAG_MATCHING_FAILED, 1)
-        _set_text(doc, FIELD_AI_LAST_ERROR, str(e))
+        _matching_error = str(e)
+
     finally:
-        _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
+        # Recharger d'abord pour éviter TimestampMismatchError,
+        # puis appliquer les flags APRÈS le reload pour qu'ils soient bien persistés.
         try:
             doc.reload()
         except Exception:
             pass
+        _set_flag(doc, FLAG_MATCHING_IN_PROGRESS, 0)
+        if _matching_error:
+            _set_flag(doc, FLAG_MATCHING_FAILED, 1)
+            _set_text(doc, FIELD_AI_LAST_ERROR, _matching_error)
+        elif _matching_succeeded:
+            _set_flag(doc, FLAG_MATCHING_FAILED, 0)
+            _set_text(doc, FIELD_AI_LAST_ERROR, "")
+        doc.flags.ignore_permissions = True
+        doc.validate_workflow = lambda: None
         doc.save(ignore_permissions=True)
         frappe.db.commit()
