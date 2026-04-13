@@ -18,6 +18,7 @@ def _enqueue_matching(applicant_name: str):
         queue="long",
         timeout=300,
         now=False,
+        user="Administrator",  # job système : toujours en Administrator, peu importe qui a soumis
     )
 
 

@@ -14,7 +14,6 @@
   "testlify_token",
   "testlify_candidate_invite",
   "testlify_webhook_token",
-  "webhook_service_user",
   "scoring_section",
   "qualification_score_threshold",
   "score_test",
@@ -45,7 +44,8 @@
   {
    "fieldname": "gemini_api_key",
    "fieldtype": "Password",
-   "label": "Clé API Gemini",
+   "in_list_view": 1,
+   "label": "Cl\u00e9 API Gemini",
    "reqd": 1
   },
   {
@@ -83,13 +83,6 @@
    "label": "Token webhook Testlify (X-Webhook-Token)"
   },
   {
-   "default": "Administrator",
-   "fieldname": "webhook_service_user",
-   "fieldtype": "Link",
-   "label": "Utilisateur de service webhook",
-   "options": "User"
-  },
-  {
    "fieldname": "scoring_section",
    "fieldtype": "Section Break",
    "label": "Seuils et statuts"
@@ -105,7 +98,7 @@
    "default": "40",
    "fieldname": "score_test",
    "fieldtype": "Int",
-   "label": "Seuil réussite test Testlify (%)",
+   "label": "Seuil r\u00e9ussite test Testlify (%)",
    "non_negative": 1
   },
   {
@@ -124,36 +117,36 @@
    "fieldname": "gemini_error_status",
    "fieldtype": "Select",
    "label": "Statut en cas d'erreur Gemini",
-   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+   "options": "\nOpen\nVivrier\nTop Profil\nReject\u00e9\nEn Cours de qualification\nAccept\u00e9"
   },
   {
    "fieldname": "status_qualified",
    "fieldtype": "Select",
-   "label": "Statut si qualifié (score ≥ seuil)",
-   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+   "label": "Statut si qualifi\u00e9 (score \u2265 seuil)",
+   "options": "\nOpen\nVivrier\nTop Profil\nReject\u00e9\nEn Cours de qualification\nAccept\u00e9"
   },
   {
    "fieldname": "status_not_qualified",
    "fieldtype": "Select",
-   "label": "Statut si non qualifié (score < seuil)",
-   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+   "label": "Statut si non qualifi\u00e9 (score < seuil)",
+   "options": "\nOpen\nVivrier\nTop Profil\nReject\u00e9\nEn Cours de qualification\nAccept\u00e9"
   },
   {
    "fieldname": "status_after_test",
    "fieldtype": "Select",
-   "label": "Statut après réussite du test",
-   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+   "label": "Statut apr\u00e8s r\u00e9ussite du test",
+   "options": "\nOpen\nVivrier\nTop Profil\nReject\u00e9\nEn Cours de qualification\nAccept\u00e9"
   },
   {
    "fieldname": "status_rejected",
    "fieldtype": "Select",
-   "label": "Statut rejeté",
-   "options": "\nOpen\nVivrier\nTop Profil\nRejecté\nEn Cours de qualification\nAccepté"
+   "label": "Statut rejet\u00e9",
+   "options": "\nOpen\nVivrier\nTop Profil\nReject\u00e9\nEn Cours de qualification\nAccept\u00e9"
   },
   {
    "fieldname": "section_break_ngmo",
    "fieldtype": "Section Break",
-   "label": "Email — Candidat non retenu (après IA)"
+   "label": "Email \u2014 Candidat non retenu (apr\u00e8s IA)"
   },
   {
    "fieldname": "candidate_not_matching_subject",
@@ -163,7 +156,7 @@
   {
    "fieldname": "candidate_not_matching_email_header",
    "fieldtype": "Data",
-   "label": "En-tête"
+   "label": "En-t\u00eate"
   },
   {
    "fieldname": "column_break_pymk",
@@ -178,7 +171,7 @@
   {
    "fieldname": "rejected_email_configuration_section",
    "fieldtype": "Section Break",
-   "label": "Email — Candidat rejeté (après test Testlify)"
+   "label": "Email \u2014 Candidat rejet\u00e9 (apr\u00e8s test Testlify)"
   },
   {
    "fieldname": "candidate_rejected_after_test_subject",
@@ -188,7 +181,7 @@
   {
    "fieldname": "candidate_rejected_after_test_header",
    "fieldtype": "Data",
-   "label": "En-tête"
+   "label": "En-t\u00eate"
   },
   {
    "fieldname": "column_break_bcqc",
@@ -205,7 +198,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-27 00:00:00.000000",
+ "modified": "2026-04-13 01:19:25.758561",
  "modified_by": "Administrator",
  "module": "job_auto_match",
  "name": "Job Matching Integration Settings",
